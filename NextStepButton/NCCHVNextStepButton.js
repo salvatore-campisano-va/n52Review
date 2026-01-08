@@ -1,4 +1,54 @@
 // NCCHVNextStepButton.js
+$(document).ready(function () {
+    $("#NextStep").click(async function () {
+        const $button = $(this);
+        
+        // Prevent double-clicks
+        if ($button.hasClass("btn-loading")) {
+            return;
+        }
+
+        try {
+            setButtonLoading($button, true);
+            await executeRequestValidationAndAction();
+        } catch (error) {
+            console.error("Error in NextStep click handler:", error);
+            showAlert("An unexpected error occurred. Please try again.");
+        } finally {
+            setButtonLoading($button, false);
+        }
+    });
+});
+
+// Get parent Xrm if possible
+function getXrm() {
+    return parent.Xrm || Xrm;
+}
+
+// Show alert dialog
+function showAlert(message, title = "Alert") {
+    const xrm = getXrm();
+    
+    // Use modern alertDialog if available
+    if (xrm.Navigation && xrm.Navigation.openAlertDialog) {
+        return xrm.Navigation.openAlertDialog({ text: message, title: title });
+    }
+    // Fallback to deprecated method
+    return xrm.Utility.alertDialog(message);
+}
+
+function setButtonLoading($button, isLoading) {
+    if (isLoading) {
+        $button.addClass("btn-loading");
+        $button.find(".button-text").text("Processing next step...");
+        $button.find(".spinner-border").removeClass("d-none");
+    } else {
+        $button.removeClass("btn-loading");
+        $button.find(".button-text").text("Next Step");
+        $button.find(".spinner-border").addClass("d-none");
+    }
+}
+
 function onNextStepButtonClick(executionContext) {
     // Get form context
     var formContext = executionContext.getFormContext();
