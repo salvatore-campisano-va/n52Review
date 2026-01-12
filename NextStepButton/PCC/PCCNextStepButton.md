@@ -1,5 +1,7 @@
 # PCC Next Step Button - Business Logic Documentation
 
+*All code is based on the current North52 code in Production. North52 code that is commented out in the formula was left out of this javascript.*
+
 ## Overview
 
 The PCC Next Step button is an iframe-embedded button on the Request (Incident) form that validates required fields, creates case notes, and advances PCC (Patient Care Coordination) requests to their next action step.
