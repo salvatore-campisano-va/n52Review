@@ -11,25 +11,16 @@ var IVDCompleteRequest = IVDCompleteRequest || {};
 // ============================================================================
 
 IVDCompleteRequest.config = {
-    undeterminedVeteranId: "1b8680e1-8d87-e611-9422-0050568dade6",
-    
-    caseNote: {
-        entityName: "vhacrm_casenote",
-        caseNoteTypeCode: 168790000
-    },
-    
     workflows: {
-        deactivate: "579F4A5D-E67E-404E-AA3A-896C3D5392FC", // TODO: Replace with actual GUID for "Request - Deactivate"
-        sendCompleteEmail: "4F43663B-A12B-44ED-B415-34C9F7642AD9", // TODO: Replace with actual GUID for "Request - Send Request Complete Return Email"
-        completeRequest: "68E7DAE8-93A7-4F73-AFB4-77C565E211CE", // TODO: Replace with actual GUID for "EED-Request Complete Request"
-        hecAlertNotification: "98AC5C10-D6E7-46EF-8ED0-08A146781BEF" // TODO: Replace with actual GUID for "EED-Send HEC Alert Complete Notification"
+        // Workflow "Request - Deactivate"
+        deactivate: "579F4A5D-E67E-404E-AA3A-896C3D5392FC", 
+        // Workflow "EED-Request Complete Request"
+        completeRequest: "68E7DAE8-93A7-4F73-AFB4-77C565E211CE"
     },
     
     resolutions: {
-        enteredInError: "Entered in Error",
         createdInError: "Created in Error",
-        pendingRad: "Pending Future RAD",
-        undeterminedVeteran: "No Action - Undetermined Veteran"
+        pendingRad: "Pending Future RAD"
     }
 };
 
@@ -52,21 +43,14 @@ IVDCompleteRequest.state = {
         radDate: null,
         reevaluateDate: null,
         noContactRequired: null,
-        caseNoteMemo: null,
-        caseNoteTemplate: null,
         icn: null,
         hecAlert: null,
-        lob: null,
-        area: null,
-        subArea: null,
         daysAtAssignment: null
     },
     
     flags: {
-        isEnteredInError: false,
         isCreatedInError: false,
-        isPendingRad: false,
-        isUndeterminedVeteran: false
+        isPendingRad: false
     },
     
     counts: {
@@ -216,17 +200,11 @@ IVDCompleteRequest.loadFormData = function() {
     state.request.veteran = this.getLookupValue("customerid");
     state.request.type = this.getLookupValue("vhacrm_typeintersectionid");
     state.request.resolution = this.getLookupValue("vhacrm_resolutionintersectionid");
-    // verificationMethod is loaded separately via loadVerificationMethod()
     state.request.radDate = this.getAttributeValue("vhacrm_raddate_date");
     state.request.reevaluateDate = this.getAttributeValue("vhacrm_reevaluatedate_date");
     state.request.noContactRequired = this.getAttributeValue("vhacrm_nocontactrequired_bool");
-    state.request.caseNoteMemo = this.getAttributeValue("vhacrm_casenotes_memo");
-    state.request.caseNoteTemplate = this.getLookupValue("vhacrm_casenotetemplateid");
     state.request.icn = this.getAttributeValue("vhacrm_icn_text");
     state.request.hecAlert = this.getLookupValue("vhacrm_hecalertid");
-    state.request.lob = this.getLookupValue("vhacrm_lobid");
-    state.request.area = this.getLookupValue("vhacrm_areaintersectionid");
-    state.request.subArea = this.getLookupValue("vhacrm_subareaintersectionid");
     state.request.daysAtAssignment = this.getAttributeValue("vhacrm_daysatassignment_number");
 };
 
@@ -280,10 +258,8 @@ IVDCompleteRequest.loadResolutionName = async function() {
     const resName = this.state.request.resolutionName;
     const resolutions = this.config.resolutions;
     
-    this.state.flags.isEnteredInError = resName === resolutions.enteredInError;
     this.state.flags.isCreatedInError = resName === resolutions.createdInError;
     this.state.flags.isPendingRad = resName === resolutions.pendingRad;
-    this.state.flags.isUndeterminedVeteran = resName === resolutions.undeterminedVeteran;
 };
 
 IVDCompleteRequest.loadActivityCounts = async function() {
@@ -345,30 +321,20 @@ IVDCompleteRequest.runValidations = async function() {
     const errors = [];
     const state = this.state;
     const flags = state.flags;
-    const config = this.config;
     
-    if (flags.isEnteredInError || flags.isCreatedInError) {
+    if (flags.isCreatedInError) {
         return errors;
     }
     
-    const veteranId = state.request.veteran 
-        ? this.cleanGuid(state.request.veteran.id) 
-        : "";
-    const isUndeterminedVeteranRecord = veteranId === config.undeterminedVeteranId;
-    
-    if (isUndeterminedVeteranRecord && !flags.isUndeterminedVeteran) {
-        errors.push("Veteran is required to complete the request.");
+    if (!state.request.veteran) {
+        errors.push("A Veteran is required to complete the request.");
     }
     
-    if (!state.request.verificationMethod && 
-        !flags.isUndeterminedVeteran && 
-        !isUndeterminedVeteranRecord) {
+    if (!state.request.verificationMethod) {
         errors.push("Verification Method is required to complete the request.");
     }
     
-    if (!flags.isUndeterminedVeteran && 
-        !isUndeterminedVeteranRecord &&
-        state.counts.correspondence === 0 && 
+    if (state.counts.correspondence === 0 && 
         state.counts.phoneCalls === 0 && 
         state.request.noContactRequired !== true) {
         errors.push("Veteran Contact Method is required.");
@@ -390,60 +356,7 @@ IVDCompleteRequest.runValidations = async function() {
 // Business Logic
 // ============================================================================
 
-IVDCompleteRequest.buildCaseNoteName = function() {
-    const parts = [];
-    const state = this.state;
-    
-    if (state.request.lob?.name) parts.push(state.request.lob.name);
-    if (state.request.type?.name) parts.push(state.request.type.name);
-    if (state.request.area?.name) parts.push(state.request.area.name);
-    if (state.request.subArea?.name) parts.push(state.request.subArea.name);
-    
-    return parts.join("/");
-};
-
-IVDCompleteRequest.createCaseNote = async function() {
-    const state = this.state;
-    
-    if (!state.request.caseNoteMemo) return;
-    if (!state.request.veteran) {
-        console.warn("Cannot create case note without veteran");
-        return;
-    }
-    
-    const caseNote = {
-        vhacrm_name: this.buildCaseNoteName(),
-        vhacrm_casenotes_memo: state.request.caseNoteMemo,
-        vhacrm_casenotetype_code: this.config.caseNote.caseNoteTypeCode,
-        "vhacrm_requestid@odata.bind": `/incidents(${state.request.id})`,
-        "vhacrm_veteranid@odata.bind": `/contacts(${this.cleanGuid(state.request.veteran.id)})`
-    };
-    
-    if (state.request.caseNoteTemplate) {
-        caseNote["vhacrm_casenotetemplateid@odata.bind"] = 
-            `/vhacrm_casenotetemplates(${this.cleanGuid(state.request.caseNoteTemplate.id)})`;
-    }
-    
-    try {
-        const result = await this.getXrm().WebApi.createRecord(
-            this.config.caseNote.entityName, 
-            caseNote
-        );
-        console.log("Case note created:", result.id);
-        
-        await this.updateRecord("incident", state.request.id, {
-            vhacrm_casenotehidden: state.request.caseNoteMemo,
-            "vhacrm_casenotetemplateid@odata.bind": null
-        });
-    } catch (error) {
-        console.error("Error creating case note:", error);
-        throw new Error("Failed to create case note.");
-    }
-};
-
 IVDCompleteRequest.updateAuditRecord = async function() {
-    if (this.state.flags.isEnteredInError) return;
-    
     try {
         const result = await this.getXrm().WebApi.retrieveMultipleRecords(
             "vhacrm_requestroutingaudit",
@@ -468,7 +381,6 @@ IVDCompleteRequest.updateAuditRecord = async function() {
 };
 
 IVDCompleteRequest.callEnrollmentStatusAPI = async function() {
-    if (this.state.flags.isEnteredInError) return;
     if (!this.state.request.icn) return;
     
     try {
@@ -498,12 +410,7 @@ IVDCompleteRequest.updateHecAlert = async function() {
             statuscode:  713770006
         });
         
-        await this.executeWorkflow(
-            this.config.workflows.hecAlertNotification, 
-            this.state.request.id
-        );
-        
-        console.log("HEC Alert updated and notification sent");
+        console.log("HEC Alert updated");
     } catch (error) {
         console.error("Error updating HEC Alert:", error);
     }
@@ -641,16 +548,10 @@ IVDCompleteRequest.handleCreatedInError = async function() {
 
 IVDCompleteRequest.completeRequest = async function() {
     try {
-        await this.createCaseNote();
         await this.updateAuditRecord();
         await this.callEnrollmentStatusAPI();
         await this.updateRequestRecord();
         await this.updateHecAlert();
-        
-        await this.executeWorkflow(
-            this.config.workflows.sendCompleteEmail, 
-            this.state.request.id
-        );
         
         await this.executeWorkflow(
             this.config.workflows.completeRequest, 
