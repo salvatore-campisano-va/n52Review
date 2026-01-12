@@ -1,168 +1,371 @@
-$(document).ready(function () {
-    $("#NextStep").click(async function () {
-        const $button = $(this);
-        
-        // Prevent double-clicks
-        if ($button.hasClass("btn-loading")) {
-            return;
-        }
+/**
+ * PCC Next Step Button - Core Module
+ * Handles validation and next action for PCC requests
+ */
+"use strict";
 
+var PCCNextStepButton = PCCNextStepButton || {};
+
+// ============================================================================
+// Configuration
+// ============================================================================
+
+PCCNextStepButton.config = {
+    // Case note type code
+    caseNoteTypeCode: 168790000
+};
+
+// ============================================================================
+// State
+// ============================================================================
+
+PCCNextStepButton.state = {
+    formContext: null,
+    $button: null,
+    currentUserId: null,
+    
+    request: {
+        id: null,
+        veteran: null,
+        type: null,
+        area: null,
+        facility: null,
+        facilityPharmacy: null,
+        action: null,
+        caseNoteMemo: null,
+        caseNoteTemplate: null,
+        lob: null,
+        subArea: null
+    },
+    
+    caseNoteExists: false
+};
+
+// ============================================================================
+// Initialization
+// ============================================================================
+
+PCCNextStepButton.initialize = function() {
+    const self = this;
+    
+    this.$button = document.getElementById("NextStep");
+    
+    if (!this.$button) {
+        console.error("NextStep button not found");
+        return;
+    }
+    
+    this.$button.addEventListener("click", async function() {
+        if (self.$button.classList.contains("btn-loading")) return;
+        
         try {
-            setButtonLoading($button, true);
-            await executeRequestValidationAndAction();
+            self.setButtonLoading(true);
+            await self.execute();
         } catch (error) {
-            console.error("Error in NextStep click handler:", error);
-            showAlert("An unexpected error occurred. Please try again.");
+            console.error("Error in NextStep:", error);
+            self.showAlert("An unexpected error occurred. Please try again.");
         } finally {
-            setButtonLoading($button, false);
+            self.setButtonLoading(false);
         }
     });
-});
-
-// Get parent Xrm if possible
-function getXrm() {
-    return parent.Xrm || Xrm;
-}
-
-// Show alert dialog
-function showAlert(message, title = "Alert") {
-    const xrm = getXrm();
     
-    // Use modern alertDialog if available
-    if (xrm.Navigation && xrm.Navigation.openAlertDialog) {
-        return xrm.Navigation.openAlertDialog({ text: message, title: title });
-    }
-    // Fallback to deprecated method
-    return xrm.Utility.alertDialog(message);
-}
+    console.log("PCC Next Step button initialized");
+};
 
-function setButtonLoading($button, isLoading) {
+// ============================================================================
+// UI Helper Functions
+// ============================================================================
+
+PCCNextStepButton.setButtonLoading = function(isLoading) {
+    if (!this.$button) return;
+    
     if (isLoading) {
-        $button.addClass("btn-loading");
-        $button.find(".button-text").text("Processing next step...");
-        $button.find(".spinner-border").removeClass("d-none");
+        this.$button.classList.add("btn-loading");
+        this.$button.querySelector(".button-text").textContent = "Processing...";
     } else {
-        $button.removeClass("btn-loading");
-        $button.find(".button-text").text("Next Step");
-        $button.find(".spinner-border").addClass("d-none");
+        this.$button.classList.remove("btn-loading");
+        this.$button.querySelector(".button-text").textContent = "Next Step";
     }
-}
+};
 
-async function executeRequestValidationAndAction() {
-    // Get form context
-    const xrm = getXrm();
-    const formContext = xrm.Page;
-
-    // Get current user ID
-    const currentUserId = cleanGuid(xrm.Utility.getGlobalContext().userSettings.userId);
-
-    // Check if vhacrm_actionintersectionid has data
-    const actionIntersectionId = formContext.getAttribute("vhacrm_actionintersectionid").getValue();
-    if (!actionIntersectionId) {
-        showAlert("Please select an Action before continuing.", "Missing Action");
-        return;
+PCCNextStepButton.showAlert = async function(message, title = "Alert") {
+    const xrm = this.getXrm();
+    
+    if (xrm.Navigation?.openAlertDialog) {
+        return await xrm.Navigation.openAlertDialog({ text: message, title: title });
     }
+    
+    alert(message);
+};
 
-    // Check if current user is the owner of the incident
-    const ownerId = formContext.getAttribute("ownerid").getValue()[0].id.toLowerCase().replace(/[{}]/g, "");
-    if (currentUserId.toLowerCase() !== ownerId) {
-        showAlert("You must pick the request from the queue before proceeding.", "Incorrect Request Owner");
-        return;
+// ============================================================================
+// Context Access Functions
+// ============================================================================
+
+PCCNextStepButton.getXrm = function() {
+    if (parent.Xrm) return parent.Xrm;
+    if (window.Xrm) return window.Xrm;
+    throw new Error("Xrm is not available");
+};
+
+PCCNextStepButton.getFormContext = function() {
+    if (this.state.formContext) return this.state.formContext;
+    
+    if (parent.formContext) {
+        this.state.formContext = parent.formContext;
+        return this.state.formContext;
     }
-
-    // Run validation checks
-    const validationErrors = [];
-
-    if (!formContext.getAttribute("vhacrm_typeintersectionid")?.getValue()) {
-        validationErrors.push("Type is required to resolve a Request.");
+    
+    if (parent.Xrm?.Page?.data) {
+        this.state.formContext = parent.Xrm.Page;
+        return this.state.formContext;
     }
+    
+    throw new Error("Form context not available");
+};
 
-    if (!formContext.getAttribute("vhacrm_areaintersectionid")?.getValue()) {
-        validationErrors.push("Area is required to resolve a Request.");
-    }
+// ============================================================================
+// Utility Functions
+// ============================================================================
 
-    if (!formContext. getAttribute("vhacrm_facilityid")?.getValue()) {
-        validationErrors.push("Facility is required to resolve a Request.");
-    }
+PCCNextStepButton.cleanGuid = function(guid) {
+    if (!guid) return "";
+    return guid.replace(/[{}]/g, "").toLowerCase();
+};
 
-    if (!formContext.getAttribute("vhacrm_facilitypharmacyid")?.getValue()) {
-        validationErrors.push("Facility Pharmacy is required to resolve a Request.");
-    }
+PCCNextStepButton.getCurrentUserId = function() {
+    if (this.state.currentUserId) return this.state.currentUserId;
+    this.state.currentUserId = this.cleanGuid(
+        this.getXrm().Utility.getGlobalContext().userSettings.userId
+    );
+    return this.state.currentUserId;
+};
 
-    const customerValue = formContext.getAttribute("customerid")?.getValue();
-    if (!customerValue || customerValue.length === 0) {
-        validationErrors.push("Veteran is required to resolve a Request.");
-    }
+PCCNextStepButton.getLookupValue = function(attributeName) {
+    const formContext = this.getFormContext();
+    const attribute = formContext.getAttribute(attributeName);
+    if (!attribute) return null;
+    const value = attribute.getValue();
+    if (!value || value.length === 0) return null;
+    return value[0];
+};
 
-    const incidentId = cleanGuid(formContext.data.entity.getId());
-    const caseNotesMemo = formContext.getAttribute("vhacrm_casenotes_memo")?.getValue();
-    const caseNoteExists = await checkCaseNoteExists(incidentId, ownerId);
+PCCNextStepButton.getAttributeValue = function(attributeName) {
+    const formContext = this.getFormContext();
+    const attribute = formContext.getAttribute(attributeName);
+    return attribute ? attribute.getValue() : null;
+};
 
-    if (!caseNotesMemo && !caseNoteExists) {
-        validationErrors.push("Please enter a Case Note before proceeding with action.");
-    }
+// ============================================================================
+// Data Loading
+// ============================================================================
 
-    // Check if all validations passed
-    if (validationErrors.length > 0) {
-        const errorMessage = "Please correct the following:\n• " + validationErrors.join("\n• ");
-        await showAlert(errorMessage, "Validation Errors");
-        return;
-    }
+PCCNextStepButton.loadFormData = function() {
+    const formContext = this.getFormContext();
+    const state = this.state;
+    
+    state.request.id = this.cleanGuid(formContext.data.entity.getId());
+    state.request.veteran = this.getLookupValue("customerid");
+    state.request.type = this.getLookupValue("vhacrm_typeintersectionid");
+    state.request.area = this.getLookupValue("vhacrm_areaintersectionid");
+    state.request.facility = this.getLookupValue("vhacrm_facilityid");
+    state.request.facilityPharmacy = this.getLookupValue("vhacrm_facilitypharmacyid");
+    state.request.action = this.getLookupValue("vhacrm_actionintersectionid");
+    state.request.caseNoteMemo = this.getAttributeValue("vhacrm_casenotes_memo");
+    state.request.caseNoteTemplate = this.getLookupValue("vhacrm_casenotetemplateid");
+    state.request.lob = this.getLookupValue("vhacrm_lobid");
+    state.request.subArea = this.getLookupValue("vhacrm_subareaintersectionid");
+};
 
-    // All validations passed - proceed with actions
-    if (caseNotesMemo) {
-        const noteName = buildCaseNoteName(formContext);
-        const veteranId = cleanGuid(customerValue[0].id);
-        const templateValue = formContext.getAttribute("vhacrm_casenotetemplateid")?.getValue();
-        const templateId = templateValue ? templateValue[0].id : null;
-
-        await createCaseNote(noteName, caseNotesMemo, incidentId, veteranId, templateId);
-    }
-
-    // Update Next Action bool to activate workflow PCC - Initiate Next Action
-    Xrm.Page.data.entity.attributes.get("vhacrm_onpccnextactionbutton")?.setValue(true);
-
-    window.parent.Xrm.Page.data.entity.save("saveandclose");
-}
-
-// Helper function to check if a case note exists
-async function checkCaseNoteExists(incidentId, ownerId) {
-    const xrm = getXrm();
-    const query = `?$select=vhacrm_name&$top=1&$filter=_vhacrm_requestid_value eq '${incidentId}' and _createdby_value eq '${ownerId}'`;
+PCCNextStepButton.checkCaseNoteExists = async function() {
+    const requestId = this.state.request.id;
+    const ownerId = this.getCurrentUserId();
+    
     try {
-        const response = await xrm.WebApi.retrieveMultipleRecords("vhacrm_casenote", query);
-        return response.entities. length > 0;
+        const result = await this.getXrm().WebApi.retrieveMultipleRecords(
+            "vhacrm_casenote",
+            `?$select=vhacrm_name&$top=1&$filter=_vhacrm_requestid_value eq '${requestId}' and _createdby_value eq '${ownerId}'`
+        );
+        this.state.caseNoteExists = result.entities.length > 0;
     } catch (error) {
         console.error("Error checking case note existence:", error);
-        throw new Error("Failed to check for existing case notes.");
+        this.state.caseNoteExists = false;
     }
-}
+};
 
-// Helper function to create a case note
-async function createCaseNote(name, memo, incidentId, veteranId, caseNoteTemplateId) {
-    const xrm = getXrm();
-    caseNoteTemplateId = cleanGuid(caseNoteTemplateId);
+// ============================================================================
+// Validation
+// ============================================================================
+
+PCCNextStepButton.isCurrentUserOwner = function() {
+    const owner = this.getLookupValue("ownerid");
+    if (!owner) return false;
+    return this.cleanGuid(owner.id) === this.getCurrentUserId();
+};
+
+PCCNextStepButton.runValidations = function() {
+    const errors = [];
+    const state = this.state;
+    
+    if (!state.request.type) {
+        errors.push("Type is required to process next step.");
+    }
+    
+    if (!state.request.area) {
+        errors.push("Area is required to process next step.");
+    }
+    
+    if (!state.request.facility) {
+        errors.push("Facility is required to process next step.");
+    }
+    
+    if (!state.request.facilityPharmacy) {
+        errors.push("Facility Pharmacy is required to process next step.");
+    }
+    
+    if (!state.request.veteran) {
+        errors.push("Veteran is required to process next step.");
+    }
+    
+    if (!state.request.caseNoteMemo && !state.caseNoteExists) {
+        errors.push("Please enter a Case Note before proceeding with action.");
+    }
+    
+    return errors;
+};
+
+// ============================================================================
+// Business Logic
+// ============================================================================
+
+PCCNextStepButton.buildCaseNoteName = function() {
+    const state = this.state;
+    let name = "";
+    
+    if (state.request.lob) {
+        name = state.request.lob.name;
+    }
+    
+    if (state.request.type) {
+        name += (name ? "/" : "") + state.request.type.name;
+    }
+    
+    if (state.request.area) {
+        name += (name ? "/" : "") + state.request.area.name;
+    }
+    
+    if (state.request.subArea) {
+        name += (name ? "/" : "") + state.request.subArea.name;
+    }
+    
+    return name;
+};
+
+PCCNextStepButton.createCaseNote = async function() {
+    if (!this.state.request.caseNoteMemo) return;
+    if (!this.state.request.veteran) return;
+    
     const caseNote = {
-        vhacrm_name: name,
-        vhacrm_casenotes_memo: memo,
-        "vhacrm_requestid@odata.bind": `/incidents(${incidentId})`,
-        "vhacrm_veteranid@odata.bind": `/contacts(${veteranId})`,
-        vhacrm_casenotetype_code: 168790000
+        vhacrm_name: this.buildCaseNoteName(),
+        vhacrm_casenotes_memo: this.state.request.caseNoteMemo,
+        "vhacrm_requestid@odata.bind": `/incidents(${this.state.request.id})`,
+        "vhacrm_veteranid@odata.bind": `/contacts(${this.cleanGuid(this.state.request.veteran.id)})`,
+        vhacrm_casenotetype_code: this.config.caseNoteTypeCode
     };
-
-    if (caseNoteTemplateId) {
-        caseNote["vhacrm_casenotetemplateid@odata.bind"] = `/vhacrm_casenotetemplates(${caseNoteTemplateId})`;
+    
+    if (this.state.request.caseNoteTemplate) {
+        caseNote["vhacrm_casenotetemplateid@odata.bind"] = 
+            `/vhacrm_casenotetemplates(${this.cleanGuid(this.state.request.caseNoteTemplate.id)})`;
     }
-
+    
     try {
-        await xrm.WebApi.createRecord("vhacrm_casenote", caseNote);
+        await this.getXrm().WebApi.createRecord("vhacrm_casenote", caseNote);
+        console.log("Case note created successfully");
     } catch (error) {
         console.error("Error creating case note:", error);
         throw new Error("Failed to create case note.");
     }
-}
+};
 
-function cleanGuid(guid) {
-    if (!guid) return "";
-    return guid.replace(/[{}]/g, "").toLowerCase();
-}
+PCCNextStepButton.triggerNextAction = function() {
+    const formContext = this.getFormContext();
+    const attribute = formContext.getAttribute("vhacrm_onpccnextactionbutton");
+    if (attribute) {
+        attribute.setValue(true);
+    }
+};
+
+PCCNextStepButton.saveAndClose = async function() {
+    const formContext = this.getFormContext();
+    
+    try {
+        await formContext.data.save();
+        
+        const xrm = this.getXrm();
+        if (xrm.Navigation?.navigateBack) {
+            xrm.Navigation.navigateBack();
+        } else {
+            formContext.ui.close();
+        }
+    } catch (error) {
+        console.error("Error saving record:", error);
+        throw new Error("Failed to save the record.");
+    }
+};
+
+// ============================================================================
+// Main Execution Flow
+// ============================================================================
+
+PCCNextStepButton.execute = async function() {
+    // Pre-validation: Action required
+    if (!this.getLookupValue("vhacrm_actionintersectionid")) {
+        await this.showAlert("Please select an Action before continuing.", "Missing Action");
+        return;
+    }
+    
+    // Pre-validation: Owner check
+    if (!this.isCurrentUserOwner()) {
+        await this.showAlert("You must pick the request from the queue before proceeding.", "Incorrect Request Owner");
+        return;
+    }
+    
+    // Load form data
+    this.loadFormData();
+    
+    // Check for existing case notes
+    await this.checkCaseNoteExists();
+    
+    // Run validations
+    const validationErrors = this.runValidations();
+    
+    if (validationErrors.length > 0) {
+        const errorMessage = "Please correct the following:\n• " + validationErrors.join("\n• ");
+        await this.showAlert(errorMessage, "Validation Errors");
+        return;
+    }
+    
+    // All validations passed - proceed with actions
+    try {
+        // Create case note if memo is populated
+        await this.createCaseNote();
+        
+        // Trigger workflow via boolean field
+        this.triggerNextAction();
+        
+        // Save and close
+        await this.saveAndClose();
+        
+    } catch (error) {
+        console.error("Error completing next step:", error);
+        await this.showAlert(error.message || "An error occurred. Please try again.");
+    }
+};
+
+// ============================================================================
+// Auto-initialize when DOM is ready
+// ============================================================================
+
+document.addEventListener("DOMContentLoaded", function() {
+    PCCNextStepButton.initialize();
+});
