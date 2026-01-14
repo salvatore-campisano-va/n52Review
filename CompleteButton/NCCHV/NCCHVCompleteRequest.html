@@ -1,0 +1,67 @@
+<! DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <title>Complete Request</title>
+
+    <link href="/WebResources/vhacrm_/Common/IntegrationHelpers/Scripts/bootstrap4/bootstrap.min.css" rel="stylesheet">
+    
+    <script src="ClientGlobalContext.js.aspx" type="text/javascript"></script>
+    <script src="/WebResources/vhacrm_/Common/IntegrationHelpers/Scripts/jquery.js" type="text/javascript"></script>
+    <script src="vhacrm_NCCHVCompleteRequest.js" type="text/javascript"></script>
+
+    <style>
+        body { 
+            margin: 0; 
+            padding: 8px; 
+            font-family: "Segoe UI", sans-serif; 
+        }
+        .btn { 
+            padding: 6px 16px; 
+            border: none; 
+            border-radius:  4px; 
+            cursor: pointer; 
+            font-size: 14px;
+            transition: opacity 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-success { 
+            background-color: #107c10; 
+            color: white; 
+        }
+        .btn-success:hover { 
+            background-color:  #0b5c0b; 
+        }
+        .btn-loading { 
+            opacity: 0.7; 
+            pointer-events: none; 
+        }
+        .spinner { 
+            display: none;
+            width: 14px; 
+            height:  14px; 
+            border: 2px solid #ffffff; 
+            border-top:  2px solid transparent; 
+            border-radius: 50%; 
+            animation:  spin 1s linear infinite;
+        }
+        .btn-loading .spinner { 
+            display: inline-block; 
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+    </style>
+</head>
+<body>
+    <button type="button" id="CompleteRequest" class="btn btn-success">
+        <span class="button-text">Complete Request</span>
+        <span class="spinner"></span>
+    </button>
+</body>
+</html>
