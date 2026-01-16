@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Complete Request</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background-color: transparent;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 8px;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #ffffff;
+            background-color: #0078d4;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            min-width: 160px;
+            height: 36px;
+        }
+        
+        .btn:hover {
+            background-color: #106ebe;
+        }
+        
+        .btn:active {
+            background-color: #005a9e;
+        }
+        
+        .btn:disabled,
+        .btn.btn-loading {
+            background-color: #c8c8c8;
+            cursor: not-allowed;
+        }
+        
+        .btn-loading .spinner {
+            display: inline-block;
+        }
+        
+        .spinner {
+            display: none;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <button id="CompleteRequest" class="btn" type="button">
+        <span class="spinner"></span>
+        <span class="button-text">Complete Request</span>
+    </button>
+    
+    <!-- Shared Base -->
+    <script src="ButtonBase.js"></script>
+    
+    <!-- Complete Request module - LOB modules loaded dynamically -->
+    <script src="CompleteRequestButton.js"></script>
+    
+    <!-- Initialization -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            CompleteRequestButton.initialize();
+        });
+    </script>
+</body>
+</html>
