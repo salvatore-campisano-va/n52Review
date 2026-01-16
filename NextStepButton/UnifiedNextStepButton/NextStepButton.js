@@ -1,95 +1,77 @@
 /**
- * Next Step Button - Core Module
- * Contains all shared logic for the Next Step button across all Lines of Business
+ * Next Step Button - Base Module
+ * Contains shared functionality for all LOBs
+ * Extends ButtonBase for common utilities
  */
+"use strict";
+
 var NextStepButton = NextStepButton || {};
 
 // ============================================================================
-// Configuration (can be overridden by LOB-specific files)
+// LOB Registry - LOB modules register themselves here
+// ============================================================================
+
+NextStepButton.lobHandlers = {};
+
+// Map LOB names to script files
+NextStepButton.lobScriptMap = {
+    "pcc": "NextStepButton_PCC.js",
+    "ncchv": "NextStepButton_NCCHV.js"
+};
+
+NextStepButton.registerLOB = function(lobName, handler) {
+    this.lobHandlers[lobName.toLowerCase()] = handler;
+    console.log(`LOB handler registered: ${lobName}`);
+};
+
+// ============================================================================
+// Configuration - Base config, LOBs extend this
 // ============================================================================
 
 NextStepButton.config = {
-    lobName: "Default",
-    
-    requiredFields: {
-        type:  { field: "vhacrm_typeintersectionid", message: "Type is required for next step." },
-        area: { field: "vhacrm_areaintersectionid", message: "Area is required for next step." },
-        facility: { field: "vhacrm_facilityid", message:  "Facility is required for next step." },
-        facilityPharmacy: { field:  "vhacrm_facilitypharmacyid", message:  "Facility Pharmacy is required for next step." },
-        veteran: { field: "customerid", message: "Veteran is required for next step." }
-    },
-    
+    // Case note configuration
     caseNote: {
         entityName: "vhacrm_casenote",
-        caseNoteTypeCode: 168790000,
-        requireCaseNote: true
+        caseNoteTypeCode: 168790000
     },
     
+    // Fields used to build case note name
     caseNoteNameFields: [
         "vhacrm_lobid",
         "vhacrm_typeintersectionid",
         "vhacrm_areaintersectionid",
         "vhacrm_subareaintersectionid"
-    ],
+    ]
+};
+
+// ============================================================================
+// State - Base state, LOBs extend this
+// ============================================================================
+
+NextStepButton.state = {
+    $button: null,
+    currentLOB: null,
     
-    customValidation: null,
-    beforeSave: null,
-    afterSave: null
-};
-
-// ============================================================================
-// LOB Configuration Mapping
-// ============================================================================
-
-// Map LOB names (from vhacrm_lobid lookup) to their configuration file names
-NextStepButton.lobMapping = {
-    "PCC": "PCCNextStepButton",
-    // Add more LOB mappings as needed
-};
-
-// ============================================================================
-// LOB Configuration Loader
-// ============================================================================
-
-NextStepButton.loadLobConfiguration = async function() {
-    try {
-        const formContext = this.getFormContext();
-        const lobLookup = this.getLookupValue(formContext, "vhacrm_lobid");
-        
-        if (!lobLookup || !lobLookup.name) {
-            console.warn("No LOB selected on form.  Using default configuration.");
-            this.initialize();
-            return;
-        }
-        
-        const lobName = lobLookup.name;
-        const lobScript = this.lobMapping[lobName];
-        
-        if (lobScript) {
-            await this.loadScript(`/WebResources/${lobScript}.js`);
-            console.log(`Loaded LOB configuration:  ${lobName}`);
-        } else {
-            console.warn(`No LOB configuration found for: ${lobName}. Using defaults.`);
-        }
-        
-        this.config.lobName = lobName;
-        this.initialize();
-        
-    } catch (error) {
-        console.error("Error loading LOB configuration:", error);
-        // Initialize with default configuration
-        this.initialize();
-    }
-};
-
-NextStepButton.loadScript = function(src) {
-    return new Promise((resolve, reject) => {
-        const script = document. createElement("script");
-        script.src = src;
-        script.onload = resolve;
-        script. onerror = reject;
-        document.head.appendChild(script);
-    });
+    request: {
+        id: null,
+        lob: null,
+        lobName: null,
+        veteran: null,
+        type: null,
+        area: null,
+        subArea: null,
+        facility: null,
+        action: null,
+        caseNoteMemo: null,
+        caseNoteTemplate: null
+    },
+    
+    flags: {
+        caseNoteExists: false
+    },
+    
+    // Track loading promises to prevent duplicate loads
+    loadingPromises: {}
 };
 
 // ============================================================================
@@ -99,157 +81,148 @@ NextStepButton.loadScript = function(src) {
 NextStepButton.initialize = function() {
     const self = this;
     
-    $("#NextStep").click(async function() {
-        const $button = $(this);
+    this.state.$button = document.getElementById("NextStep");
+    
+    if (!this.state.$button) {
+        console.error("NextStep button not found");
+        return;
+    }
+    
+    this.state.$button.addEventListener("click", async function() {
+        if (self.state.$button.classList.contains("btn-loading")) return;
         
-        if ($button.hasClass("btn-loading")) {
-            return;
-        }
-
         try {
-            self.setButtonLoading($button, true);
-            await self.executeValidationAndAction();
+            ButtonBase.setButtonLoading(self.state.$button, true, "Processing...", "Next Step");
+            await self.execute();
         } catch (error) {
-            console. error("Error in NextStep click handler:", error);
-            await self.showAlert("An unexpected error occurred. Please try again.");
+            console.error("Error in NextStep:", error);
+            await ButtonBase.showAlert("An unexpected error occurred. Please try again.");
         } finally {
-            self. setButtonLoading($button, false);
+            ButtonBase.setButtonLoading(self.state.$button, false, "Processing...", "Next Step");
         }
     });
     
-    console.log(`Next Step Button initialized for LOB: ${this. config.lobName}`);
+    console.log("Next Step button initialized");
+    
+    // Preload LOB script in background
+    this.preloadLOBScript();
+};
+
+NextStepButton.preloadLOBScript = async function() {
+    try {
+        // Load base form data to get LOB
+        this.loadBaseFormData();
+        
+        const lobKey = this.getLOBKey();
+        if (lobKey) {
+            await this.loadLOBScript(lobKey);
+            console.log("LOB script preloaded:", lobKey);
+        }
+    } catch (error) {
+        // Silently fail - will retry on click
+        console.log("LOB preload skipped:", error.message);
+    }
 };
 
 // ============================================================================
 // UI Helper Functions
 // ============================================================================
 
-NextStepButton.setButtonLoading = function($button, isLoading) {
-    if (isLoading) {
-        $button.addClass("btn-loading").prop("disabled", true);
-        $button.find(".button-text").text("Processing...");
-        $button.find(".spinner-border").removeClass("d-none");
-    } else {
-        $button.removeClass("btn-loading").prop("disabled", false);
-        $button.find(".button-text").text("Next Step");
-        $button.find(".spinner-border").addClass("d-none");
-    }
+NextStepButton.showError = function(message) {
+    ButtonBase.showError(message, "NEXTSTEP_ERROR");
 };
 
-NextStepButton.showAlert = async function(message, title = "Alert") {
-    const xrm = this.getXrm();
+NextStepButton.clearError = function() {
+    ButtonBase.clearError("NEXTSTEP_ERROR");
+};
+
+// ============================================================================
+// Data Loading - Base
+// ============================================================================
+
+NextStepButton.loadBaseFormData = function() {
+    const formContext = ButtonBase.getFormContext();
+    const state = this.state;
     
-    if (xrm.Navigation?. openAlertDialog) {
-        return await xrm.Navigation.openAlertDialog({ text: message, title: title });
-    }
+    state.request.id = ButtonBase.cleanGuid(formContext.data.entity.getId());
+    state.request.lob = ButtonBase.getLookupValue("vhacrm_lobid");
+    state.request.veteran = ButtonBase.getLookupValue("customerid");
+    state.request.type = ButtonBase.getLookupValue("vhacrm_typeintersectionid");
+    state.request.area = ButtonBase.getLookupValue("vhacrm_areaintersectionid");
+    state.request.subArea = ButtonBase.getLookupValue("vhacrm_subareaintersectionid");
+    state.request.facility = ButtonBase.getLookupValue("vhacrm_facilityid");
+    state.request.action = ButtonBase.getLookupValue("vhacrm_actionintersectionid");
+    state.request.caseNoteMemo = ButtonBase.getAttributeValue("vhacrm_casenotes_memo");
+    state.request.caseNoteTemplate = ButtonBase.getLookupValue("vhacrm_casenotetemplateid");
     
-    return new Promise((resolve) => {
-        if (xrm.Utility?. alertDialog) {
-            xrm.Utility.alertDialog(message, resolve);
-        } else {
-            alert(message);
-            resolve();
-        }
-    });
-};
-
-// ============================================================================
-// Context Access Functions
-// ============================================================================
-
-NextStepButton.getXrm = function() {
-    if (parent.Xrm) return parent.Xrm;
-    if (window.Xrm) return window.Xrm;
-    throw new Error("Xrm is not available");
-};
-
-NextStepButton. getFormContext = function() {
-    if (parent.Ms?.Common?.GlobalContext?. formContext) {
-        return parent. Ms.Common.GlobalContext.formContext;
+    // Get LOB name for routing
+    if (state.request.lob) {
+        state.request.lobName = state.request.lob.name;
     }
-    if (parent.Xrm?. Page?.data) {
-        return parent.Xrm.Page;
+};
+
+NextStepButton.checkCaseNoteExists = async function() {
+    const requestId = this.state.request.id;
+    const ownerId = ButtonBase.getCurrentUserId();
+    
+    try {
+        const result = await ButtonBase.retrieveMultipleRecords(
+            "vhacrm_casenote",
+            `?$select=vhacrm_name&$top=1&$filter=_vhacrm_requestid_value eq '${requestId}' and _createdby_value eq '${ownerId}'`
+        );
+        this.state.flags.caseNoteExists = result.entities.length > 0;
+    } catch (error) {
+        console.error("Error checking case note existence:", error);
+        this.state.flags.caseNoteExists = false;
     }
-    throw new Error("Form context not available");
-};
-
-NextStepButton.getGlobalContext = function() {
-    if (parent.Ms?.Common?. GlobalContext?.globalContext) {
-        return parent.Ms.Common. GlobalContext.globalContext;
-    }
-    const xrm = this.getXrm();
-    if (xrm. Utility?.getGlobalContext) {
-        return xrm. Utility.getGlobalContext();
-    }
-    throw new Error("Global context not available");
 };
 
 // ============================================================================
-// Utility Functions
+// Validation - Base
 // ============================================================================
 
-NextStepButton.cleanGuid = function(guid) {
-    if (!guid) return "";
-    return guid.replace(/[{}]/g, "").toLowerCase();
-};
-
-NextStepButton.getCurrentUserId = function() {
-    const globalContext = this.getGlobalContext();
-    return this.cleanGuid(globalContext.userSettings. userId);
-};
-
-NextStepButton.getLookupValue = function(formContext, attributeName) {
-    const attribute = formContext. getAttribute(attributeName);
-    if (!attribute) return null;
-    const value = attribute.getValue();
-    if (!value || value.length === 0) return null;
-    return value[0];
-};
-
-// ============================================================================
-// Validation Functions
-// ============================================================================
-
-NextStepButton.validateRequiredFields = function(formContext) {
+NextStepButton.runBaseValidations = function() {
     const errors = [];
-    const requiredFields = this. config. requiredFields;
+    const state = this.state;
     
-    for (const key in requiredFields) {
-        const fieldConfig = requiredFields[key];
-        if (!this.getLookupValue(formContext, fieldConfig.field)) {
-            errors.push(fieldConfig. message);
-        }
+    // Type is required
+    if (!state.request.type) {
+        errors.push("Type is required to process next step.");
+    }
+    
+    // Area is required
+    if (!state.request.area) {
+        errors.push("Area is required to process next step.");
+    }
+    
+    // Facility is required
+    if (!state.request.facility) {
+        errors.push("Facility is required to process next step.");
+    }
+    
+    // Veteran is required
+    if (!state.request.veteran) {
+        errors.push("Veteran is required to process next step.");
+    }
+    
+    // Case Note is required (memo OR existing)
+    if (!state.request.caseNoteMemo && !state.flags.caseNoteExists) {
+        errors.push("Please enter a Case Note before proceeding with action.");
     }
     
     return errors;
 };
 
-NextStepButton.checkCaseNoteExists = async function(incidentId, owningUserId) {
-    const xrm = this.getXrm();
-    const cleanIncidentId = this.cleanGuid(incidentId);
-    const cleanOwningUserId = this. cleanGuid(owningUserId);
-    
-    const query = `?$select=vhacrm_name&$top=1&$filter=_vhacrm_requestid_value eq '${cleanIncidentId}' and _createdby_value eq '${cleanOwningUserId}'`;
-    
-    try {
-        const response = await xrm.WebApi.retrieveMultipleRecords(this.config.caseNote.entityName, query);
-        return response.entities.length > 0;
-    } catch (error) {
-        console.error("Error checking case note existence:", error);
-        throw new Error("Failed to check for existing case notes.");
-    }
-};
-
 // ============================================================================
-// Case Note Functions
+// Business Logic - Common
 // ============================================================================
 
-NextStepButton.buildCaseNoteName = function(formContext) {
+NextStepButton.buildCaseNoteName = function() {
     const parts = [];
     
-    this. config.caseNoteNameFields.forEach((fieldName) => {
-        const lookup = this.getLookupValue(formContext, fieldName);
-        if (lookup?. name) {
+    this.config.caseNoteNameFields.forEach((fieldName) => {
+        const lookup = ButtonBase.getLookupValue(fieldName);
+        if (lookup?.name) {
             parts.push(lookup.name);
         }
     });
@@ -257,141 +230,165 @@ NextStepButton.buildCaseNoteName = function(formContext) {
     return parts.join("/");
 };
 
-NextStepButton.createCaseNote = async function(name, memo, incidentId, veteranId, caseNoteTemplateId) {
-    const xrm = this.getXrm();
-
+NextStepButton.createCaseNote = async function() {
+    if (!this.state.request.caseNoteMemo) return;
+    if (!this.state.request.veteran) return;
+    
     const caseNote = {
-        vhacrm_name: name,
-        vhacrm_casenotes_memo: memo,
-        "vhacrm_requestid@odata.bind": `/incidents(${this.cleanGuid(incidentId)})`,
-        "vhacrm_veteranid@odata.bind":  `/contacts(${this.cleanGuid(veteranId)})`,
-        vhacrm_casenotetype_code: this. config.caseNote.caseNoteTypeCode
+        vhacrm_name: this.buildCaseNoteName(),
+        vhacrm_casenotes_memo: this.state.request.caseNoteMemo,
+        "vhacrm_requestid@odata.bind": `/incidents(${this.state.request.id})`,
+        "vhacrm_veteranid@odata.bind": `/contacts(${ButtonBase.cleanGuid(this.state.request.veteran.id)})`,
+        vhacrm_casenotetype_code: this.config.caseNote.caseNoteTypeCode
     };
-
-    if (caseNoteTemplateId) {
-        caseNote["vhacrm_casenotetemplateid@odata.bind"] = `/vhacrm_casenotetemplates(${this.cleanGuid(caseNoteTemplateId)})`;
+    
+    if (this.state.request.caseNoteTemplate) {
+        caseNote["vhacrm_casenotetemplateid@odata.bind"] = 
+            `/vhacrm_casenotetemplates(${ButtonBase.cleanGuid(this.state.request.caseNoteTemplate.id)})`;
     }
-
+    
     try {
-        const result = await xrm.WebApi.createRecord(this.config.caseNote.entityName, caseNote);
-        console.log("Case note created with ID:", result.id);
-        return result;
+        await ButtonBase.createRecord(this.config.caseNote.entityName, caseNote);
+        console.log("Case note created successfully");
     } catch (error) {
         console.error("Error creating case note:", error);
         throw new Error("Failed to create case note.");
     }
 };
 
-// ============================================================================
-// Main Execution Function
-// ============================================================================
-
-NextStepButton.executeValidationAndAction = async function() {
-    const formContext = this.getFormContext();
-    const currentUserId = this.getCurrentUserId();
-
-    // Check if action is selected
-    const actionIntersection = this.getLookupValue(formContext, "vhacrm_actionintersectionid");
-    if (!actionIntersection) {
-        await this.showAlert("Please select an Action before continuing.");
-        return;
-    }
-
-    // Check if current user is the owner
-    const owner = this.getLookupValue(formContext, "ownerid");
-    if (!owner) {
-        await this.showAlert("Unable to determine the record owner.");
-        return;
-    }
-    
-    const ownerId = this.cleanGuid(owner. id);
-    if (currentUserId !== ownerId) {
-        await this.showAlert("You must pick the request from the queue before proceeding.");
-        return;
-    }
-
-    // Run standard validation
-    const validationErrors = this.validateRequiredFields(formContext);
-
-    // Run LOB-specific custom validation if defined
-    if (typeof this.config.customValidation === "function") {
-        const customErrors = await this.config.customValidation(formContext, this);
-        if (customErrors?. length > 0) {
-            validationErrors.push(...customErrors);
-        }
-    }
-
-    // Check case note requirement
-    if (this.config.caseNote.requireCaseNote) {
-        const incidentId = formContext.data.entity.getId();
-        const owningUserId = this.getLookupValue(formContext, "owninguser")?.id;
-        const caseNotesMemo = formContext.getAttribute("vhacrm_casenotes_memo")?.getValue();
-        const caseNoteExists = await this.checkCaseNoteExists(incidentId, owningUserId);
-
-        if (!caseNotesMemo && !caseNoteExists) {
-            validationErrors.push("Please enter a Case Note before proceeding with action.");
-        }
-    }
-
-    // Show validation errors if any
-    if (validationErrors.length > 0) {
-        const errorMessage = "Please correct the following:\n\n• " + validationErrors.join("\n• ");
-        await this. showAlert(errorMessage, "Validation Errors");
-        return;
-    }
-
-    // Create case note if memo exists
-    const caseNotesMemo = formContext.getAttribute("vhacrm_casenotes_memo")?.getValue();
-    if (caseNotesMemo) {
-        const incidentId = formContext.data. entity.getId();
-        const noteName = this.buildCaseNoteName(formContext);
-        const customer = this.getLookupValue(formContext, "customerid");
-        const template = this.getLookupValue(formContext, "vhacrm_casenotetemplateid");
-
-        await this.createCaseNote(
-            noteName,
-            caseNotesMemo,
-            incidentId,
-            customer. id,
-            template?. id
-        );
-    }
-
-    // Run LOB-specific before save action if defined
-    if (typeof this. config.beforeSave === "function") {
-        await this.config.beforeSave(formContext, this);
-    }
-
-    // Set flag and save
-    const nextActionAttr = formContext.getAttribute("vhacrm_onpccnextactionbutton");
-    if (nextActionAttr) {
-        nextActionAttr.setValue(true);
-    }
-
-    formContext.data.save({ saveMode: 2 }).then(
-        async () => {
-            if (typeof this.config.afterSave === "function") {
-                await this.config.afterSave(formContext, this);
-            }
-            
-            const xrm = this.getXrm();
-            if (xrm.Navigation?.navigateBack) {
-                xrm.Navigation.navigateBack();
-            } else {
-                formContext.ui.close();
-            }
-        },
-        (error) => {
-            console. error("Error saving record:", error);
-            this.showAlert("Failed to save the record. Please try again.");
-        }
-    );
+NextStepButton.triggerNextAction = function() {
+    ButtonBase.setAttributeValue("vhacrm_onpccnextactionbutton", true);
 };
 
 // ============================================================================
-// Auto-initialize when DOM is ready
+// LOB Handler Resolution & Dynamic Loading
 // ============================================================================
 
-$(document).ready(function() {
-    NextStepButton.loadLobConfiguration();
-});
+NextStepButton.getLOBKey = function() {
+    const lobName = this.state.request.lobName;
+    if (!lobName) return null;
+    
+    const lobNameLower = lobName.toLowerCase();
+    
+    // Try exact match first
+    if (this.lobScriptMap[lobNameLower]) {
+        return lobNameLower;
+    }
+    
+    // Try partial match (e.g., "PCC" matches "PCC - Something")
+    for (const key of Object.keys(this.lobScriptMap)) {
+        if (lobNameLower.includes(key) || key.includes(lobNameLower)) {
+            return key;
+        }
+    }
+    
+    return null;
+};
+
+NextStepButton.loadLOBScript = function(lobKey) {
+    // If already loading, return existing promise
+    if (this.state.loadingPromises[lobKey]) {
+        console.log(`LOB script already loading: ${lobKey}`);
+        return this.state.loadingPromises[lobKey];
+    }
+    
+    // If already loaded, return resolved promise
+    if (this.lobHandlers[lobKey]) {
+        console.log(`LOB handler already loaded: ${lobKey}`);
+        return Promise.resolve(this.lobHandlers[lobKey]);
+    }
+    
+    const scriptFile = this.lobScriptMap[lobKey];
+    if (!scriptFile) {
+        return Promise.reject(new Error(`No script file mapped for LOB: ${lobKey}`));
+    }
+    
+    console.log(`Loading LOB script: ${scriptFile}`);
+    
+    // Create and track the loading promise
+    this.state.loadingPromises[lobKey] = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = scriptFile;
+        script.async = false;
+        
+        script.onload = () => {
+            console.log(`LOB script loaded: ${scriptFile}`);
+            // Give a brief moment for the script to execute and register
+            setTimeout(() => {
+                delete this.state.loadingPromises[lobKey]; // Clear loading state
+                if (this.lobHandlers[lobKey]) {
+                    resolve(this.lobHandlers[lobKey]);
+                } else {
+                    reject(new Error(`LOB handler did not register after loading: ${lobKey}`));
+                }
+            }, 10);
+        };
+        
+        script.onerror = () => {
+            delete this.state.loadingPromises[lobKey]; // Clear loading state
+            reject(new Error(`Failed to load LOB script: ${scriptFile}`));
+        };
+        
+        document.head.appendChild(script);
+    });
+    
+    return this.state.loadingPromises[lobKey];
+};
+
+NextStepButton.getLOBHandler = function() {
+    const lobKey = this.getLOBKey();
+    if (!lobKey) return null;
+    return this.lobHandlers[lobKey] || null;
+};
+
+// ============================================================================
+// Main Execution Flow
+// ============================================================================
+
+NextStepButton.execute = async function() {
+    this.clearError();
+    
+    // Pre-validation: Action required
+    if (!ButtonBase.getLookupValue("vhacrm_actionintersectionid")) {
+        await ButtonBase.showAlert("Please select an Action before continuing.", "Missing Action");
+        return;
+    }
+    
+    // Pre-validation: Owner check
+    if (!ButtonBase.isCurrentUserOwner()) {
+        await ButtonBase.showAlert("You must pick the request from the queue before proceeding.", "Incorrect Request Owner");
+        return;
+    }
+    
+    // Load base form data (includes LOB)
+    this.loadBaseFormData();
+    
+    // Determine LOB key
+    const lobKey = this.getLOBKey();
+    
+    if (!lobKey) {
+        this.showError(`No handler configured for LOB: ${this.state.request.lobName || "Unknown"}`);
+        return;
+    }
+    
+    // Dynamically load LOB script if not already loaded
+    let lobHandler;
+    try {
+        lobHandler = await this.loadLOBScript(lobKey);
+    } catch (error) {
+        console.error("Error loading LOB script:", error);
+        this.showError(`Failed to load handler for LOB: ${this.state.request.lobName}`);
+        return;
+    }
+    
+    // Store current LOB handler reference
+    this.state.currentLOB = lobHandler;
+    
+    // Delegate to LOB handler for specific processing
+    try {
+        await lobHandler.execute(this);
+    } catch (error) {
+        console.error(`Error in ${this.state.request.lobName} handler:`, error);
+        await ButtonBase.showAlert(error.message || "An error occurred while processing the next step.");
+    }
+};

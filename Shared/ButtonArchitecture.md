@@ -9,14 +9,21 @@ The button system uses a three-layer architecture:
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              HTML Web Resource                               │
-│                         (CompleteRequestButton.html)                         │
+│                    (CompleteRequestButton.html / NextStepButton.html)        │
 │                                                                              │
 │   ┌─────────────┐    ┌─────────────────────┐    ┌─────────────────────┐    │
-│   │  ButtonBase │ ←─ │ CompleteRequestButton│ ←─ │   LOB Handler       │    │
-│   │    (js)     │    │       (js)           │    │ (IVD/NCCHV/EED)    │    │
+│   │  ButtonBase │ ←─ │   Button Module     │ ←─ │    LOB Handler      │    │
+│   │    (js)     │    │ (Complete/NextStep) │    │ (IVD/PCC/NCCHV/EED)│    │
 │   └─────────────┘    └─────────────────────┘    └─────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Button Types
+
+| Button | Purpose | LOBs Supported |
+|--------|---------|----------------|
+| **CompleteRequestButton** | Complete/close a request with resolution | IVD, NCCHV, EED |
+| **NextStepButton** | Advance request to next workflow step | PCC, NCCHV |
 
 ## Layer Details
 
@@ -104,13 +111,56 @@ The button-specific layer containing logic for a particular button type.
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-### Layer 3: LOB Handlers (e.g., CompleteRequestButton_IVD.js)
+### Layer 2b: NextStepButton.js
 
-Line-of-Business specific logic that extends the button module.
+The Next Step button module for advancing requests through workflow steps.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                  LOB Handler (IVD/NCCHV/EED)                      │
+│                       NextStepButton.js                           │
+├──────────────────────────────────────────────────────────────────┤
+│  LOB Registry                                                     │
+│  ├── lobHandlers = {}                                            │
+│  ├── lobScriptMap = { "pcc": "..._PCC.js", ... }                │
+│  └── registerLOB(name, handler)                                  │
+├──────────────────────────────────────────────────────────────────┤
+│  Configuration                                                    │
+│  ├── config.actions (available next actions)                     │
+│  └── config.caseNoteTypeCode                                     │
+├──────────────────────────────────────────────────────────────────┤
+│  State                                                            │
+│  ├── state.request (id, lob, veteran, action, etc.)              │
+│  └── state.flags (actionRequiresNote, etc.)                      │
+├──────────────────────────────────────────────────────────────────┤
+│  Initialization                                                   │
+│  ├── initialize()                                                │
+│  └── preloadLOBScript()                                          │
+├──────────────────────────────────────────────────────────────────┤
+│  Button-Specific Logic                                            │
+│  ├── loadBaseFormData()                                          │
+│  ├── runBaseValidations()                                        │
+│  ├── createCaseNote()                                            │
+│  └── triggerNextAction()                                         │
+├──────────────────────────────────────────────────────────────────┤
+│  LOB Dynamic Loading                                              │
+│  ├── getLOBKey()                                                 │
+│  ├── loadLOBScript()                                             │
+│  └── getLOBHandler()                                             │
+├──────────────────────────────────────────────────────────────────┤
+│  Main Execution                                                   │
+│  └── execute() → delegates to LOB handler                        │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Layer 3: LOB Handlers
+
+Line-of-Business specific logic that extends the button modules.
+
+#### Complete Request LOB Handlers (IVD/NCCHV/EED)
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│           Complete Request LOB Handler (IVD/NCCHV/EED)           │
 ├──────────────────────────────────────────────────────────────────┤
 │  Registration                                                     │
 │  └── CompleteRequestButton.registerLOB("IVD", handler)           │
@@ -132,7 +182,42 @@ Line-of-Business specific logic that extends the button module.
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+#### Next Step LOB Handlers (PCC/NCCHV)
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│              Next Step LOB Handler (PCC/NCCHV)                    │
+├──────────────────────────────────────────────────────────────────┤
+│  Registration                                                     │
+│  └── NextStepButton.registerLOB("PCC", handler)                  │
+├──────────────────────────────────────────────────────────────────┤
+│  LOB-Specific Config                                              │
+│  └── config.requiredFields, config.triggerNextAction, etc.       │
+├──────────────────────────────────────────────────────────────────┤
+│  LOB-Specific Validations                                         │
+│  ├── PCC: Requires Facility Pharmacy                             │
+│  └── NCCHV: Requires Veteran Outcome for "Consult Closure"       │
+├──────────────────────────────────────────────────────────────────┤
+│  LOB-Specific Logic                                               │
+│  ├── loadFormData()                                              │
+│  ├── runValidations()                                            │
+│  └── execute() with LOB-specific behavior                        │
+├──────────────────────────────────────────────────────────────────┤
+│  Main Execution                                                   │
+│  └── execute(base) → called by NextStepButton                    │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+**Key LOB Differences for Next Step:**
+
+| LOB | Required Fields | Triggers Next Action |
+|-----|-----------------|---------------------|
+| **PCC** | Facility Pharmacy | ✅ Yes (`vhacrm_onpccnextactionbutton = true`) |
+| **NCCHV** | Veteran Outcome (for Consult Closure) | ❌ No |
+
 ## Data Flow
+
+### Complete Request Button Flow
 
 ```
 User Click
@@ -168,6 +253,37 @@ User Click
 └─────────────────────────────────────┘
 ```
 
+### Next Step Button Flow
+
+```
+User Click
+    │
+    ▼
+┌─────────────────────────────────────┐
+│        NextStepButton.js            │
+│        ─────────────────            │
+│  1. Validate action selected        │
+│  2. Validate user is owner          │
+│  3. Load base form data             │
+│  4. Determine LOB key               │
+│  5. Load LOB script (dynamic)       │
+│  6. Delegate to LOB handler         │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│       LOB Handler (e.g., PCC)       │
+│       ────────────────────────      │
+│  1. Load LOB-specific form data     │
+│  2. Run LOB validations             │
+│     - PCC: Facility Pharmacy        │
+│     - NCCHV: Veteran Outcome        │
+│  3. Create case note                │
+│  4. Trigger next action (if LOB)    │
+│  5. Save and close                  │
+└─────────────────────────────────────┘
+```
+
 ## File Structure
 
 ```
@@ -187,10 +303,14 @@ n52 Review/
 └── NextStepButton/
     └── UnifiedNextStepButton/
         ├── NextStepButton.html            ← HTML entry point
-        └── NextStepButton.js              ← Uses ButtonBase
+        ├── NextStepButton.js              ← Base module
+        ├── NextStepButton_PCC.js          ← PCC handler
+        └── NextStepButton_NCCHV.js        ← NCCHV handler
 ```
 
 ## Script Loading Order
+
+### Complete Request Button
 
 ```html
 <!-- 1. Shared utilities (must load first) -->
@@ -203,7 +323,22 @@ n52 Review/
 <!-- Loaded via CompleteRequestButton.loadLOBScript() -->
 ```
 
+### Next Step Button
+
+```html
+<!-- 1. Shared utilities (must load first) -->
+<script src="ButtonBase.js"></script>
+
+<!-- 2. Button module (depends on ButtonBase) -->
+<script src="NextStepButton.js"></script>
+
+<!-- 3. LOB handlers loaded dynamically at runtime -->
+<!-- Loaded via NextStepButton.loadLOBScript() -->
+```
+
 ## Adding a New LOB
+
+### For Complete Request Button
 
 1. Create `CompleteRequestButton_NEWLOB.js`:
 
@@ -253,6 +388,68 @@ CompleteRequestButton.lobScriptMap = {
     "ncchv": "CompleteRequestButton_NCCHV.js",
     "eed": "CompleteRequestButton_EED.js",
     "newlob": "CompleteRequestButton_NEWLOB.js"  // Add this
+};
+```
+
+### For Next Step Button
+
+1. Create `NextStepButton_NEWLOB.js`:
+
+```javascript
+(function() {
+    var NEWLOBHandler = {
+        name: "NEWLOB",
+        config: {
+            triggerNextAction: true  // Set based on LOB requirements
+        },
+        state: { /* LOB-specific state */ },
+        
+        loadFormData: function(base) {
+            // Load LOB-specific fields using ButtonBase
+            this.state.field = ButtonBase.getAttributeValue("field_name");
+        },
+        
+        runValidations: function(base) {
+            const errors = base.runBaseValidations();
+            // Add LOB-specific validations
+            if (!this.state.field) {
+                errors.push("Required field is missing.");
+            }
+            return errors;
+        },
+        
+        execute: async function(base) {
+            this.loadFormData(base);
+            
+            const errors = this.runValidations(base);
+            if (errors.length > 0) {
+                base.showError(errors.join(" | "));
+                return;
+            }
+            
+            // Create case note
+            await base.createCaseNote();
+            
+            // Trigger next action if needed
+            if (this.config.triggerNextAction) {
+                await base.triggerNextAction();
+            }
+            
+            await ButtonBase.saveAndClose();
+        }
+    };
+    
+    NextStepButton.registerLOB("NEWLOB", NEWLOBHandler);
+})();
+```
+
+2. Add to `lobScriptMap` in NextStepButton.js:
+
+```javascript
+NextStepButton.lobScriptMap = {
+    "pcc": "NextStepButton_PCC.js",
+    "ncchv": "NextStepButton_NCCHV.js",
+    "newlob": "NextStepButton_NEWLOB.js"  // Add this
 };
 ```
 

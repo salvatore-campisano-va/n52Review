@@ -1,4 +1,4 @@
-<! DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -6,31 +6,91 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <title>Next Step</title>
 
-    <link href="/WebResources/vhacrm_/Common/IntegrationHelpers/Scripts/bootstrap4/bootstrap.min.css" rel="stylesheet">
-
-    <script src="ClientGlobalContext.js. aspx" type="text/javascript"></script>
-    <script src="/WebResources/vhacrm_/Common/IntegrationHelpers/Scripts/jquery.js" type="text/javascript"></script>
-    <script src="/WebResources/NextStepButton.js" type="text/javascript"></script>
-
     <style>
-        .btn-loading {
-            pointer-events: none;
-            opacity: 0.7;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-        .spinner-border-sm {
-            width: 1rem;
-            height: 1rem;
-            border-width: 0.15em;
+        
+        body {
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background-color: transparent;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 8px;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #ffffff;
+            background-color: #107c10;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            min-width: 120px;
+            height: 36px;
+        }
+        
+        .btn:hover {
+            background-color: #0b5c0b;
+        }
+        
+        .btn:active {
+            background-color: #094509;
+        }
+        
+        .btn:disabled,
+        .btn.btn-loading {
+            background-color: #c8c8c8;
+            cursor: not-allowed;
+        }
+        
+        .btn-loading .spinner {
+            display: inline-block;
+        }
+        
+        .spinner {
+            display: none;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #ffffff;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
         }
     </style>
 </head>
-
-<body style="overflow-wrap: break-word; margin: 0;">
-    <div class="p-1">
-        <button type="button" id="NextStep" class="btn btn-success btn-sm">
-            <span class="button-text">Next Step</span>
-            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
-        </button>
-    </div>
+<body>
+    <button id="NextStep" class="btn" type="button">
+        <span class="spinner"></span>
+        <span class="button-text">Next Step</span>
+    </button>
+    
+    <!-- Shared Base -->
+    <script src="../../Shared/ButtonBase.js"></script>
+    
+    <!-- Next Step module - LOB modules loaded dynamically -->
+    <script src="NextStepButton.js"></script>
+    
+    <!-- Initialization -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            NextStepButton.initialize();
+        });
+    </script>
 </body>
 </html>
