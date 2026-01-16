@@ -42,7 +42,6 @@ IVDCompleteRequest.state = {
         verificationMethod: null,
         radDate: null,
         reevaluateDate: null,
-        noContactRequired: null,
         icn: null,
         hecAlert: null,
         daysAtAssignment: null
@@ -51,11 +50,6 @@ IVDCompleteRequest.state = {
     flags: {
         isCreatedInError: false,
         isPendingRad: false
-    },
-    
-    counts: {
-        correspondence: 0,
-        phoneCalls: 0
     },
     
     enrollmentStatus: null,
@@ -202,7 +196,6 @@ IVDCompleteRequest.loadFormData = function() {
     state.request.resolution = this.getLookupValue("vhacrm_resolutionintersectionid");
     state.request.radDate = this.getAttributeValue("vhacrm_raddate_date");
     state.request.reevaluateDate = this.getAttributeValue("vhacrm_reevaluatedate_date");
-    state.request.noContactRequired = this.getAttributeValue("vhacrm_nocontactrequired_bool");
     state.request.icn = this.getAttributeValue("vhacrm_icn_text");
     state.request.hecAlert = this.getLookupValue("vhacrm_hecalertid");
     state.request.daysAtAssignment = this.getAttributeValue("vhacrm_daysatassignment_number");
@@ -262,51 +255,6 @@ IVDCompleteRequest.loadResolutionName = async function() {
     this.state.flags.isPendingRad = resName === resolutions.pendingRad;
 };
 
-IVDCompleteRequest.loadActivityCounts = async function() {
-    const requestId = this.state.request.id;
-    
-    try {
-        const correspondenceResult = await this.getRelatedEntityCount("vhacrm_correspondence", requestId);
-        
-        const phoneCallResult = await this.getActivityCountByType("phonecall", requestId);
-        
-        this.state.counts.correspondence = correspondenceResult;
-        this.state.counts.phoneCalls = phoneCallResult;
-    } catch (error) {
-        console.error("Error loading activity counts:", error);
-        this.state.counts.correspondence = 0;
-        this.state.counts.phoneCalls = 0;
-    }
-};
-
-IVDCompleteRequest.getRelatedEntityCount = async function(entityName, requestId) {
-    try {
-        const result = await this.getXrm().WebApi.retrieveMultipleRecords(
-            entityName,
-            `?$filter=_vhacrm_requestid_value eq '${requestId}'&$select=${entityName}id`
-        );
-        return result.entities.length;
-    } catch (error) {
-        console.error(`Error getting ${entityName} count: `, error);
-        return 0;
-    }
-};
-
-IVDCompleteRequest.getActivityCountByType = async function(activityType, requestId) {
-    try {
-        // Use activitypointer entity which is the base for all activities
-        // Filter by activity type code where phonecall = 4210
-        const result = await this.getXrm().WebApi.retrieveMultipleRecords(
-            "activitypointer",
-            `?$filter=_regardingobjectid_value eq '${requestId}' and activitytypecode eq '${activityType}'&$select=activityid`
-        );
-        return result.entities.length;
-    } catch (error) {
-        console.error(`Error getting ${activityType} activity count: `, error);
-        return 0;
-    }
-};
-
 // ============================================================================
 // Validation
 // ============================================================================
@@ -332,12 +280,6 @@ IVDCompleteRequest.runValidations = async function() {
     
     if (!state.request.verificationMethod) {
         errors.push("Verification Method is required to complete the request.");
-    }
-    
-    if (state.counts.correspondence === 0 && 
-        state.counts.phoneCalls === 0 && 
-        state.request.noContactRequired !== true) {
-        errors.push("Veteran Contact Method is required.");
     }
     
     if (flags.isPendingRad) {
@@ -515,11 +457,8 @@ IVDCompleteRequest.execute = async function() {
         return;
     }
     
-    // Load verification method (relationship) and activity counts in parallel
-    await Promise.all([
-        this.loadVerificationMethod(),
-        this.loadActivityCounts()
-    ]);
+    // Load verification method (relationship)
+    await this.loadVerificationMethod();
     
     const validationErrors = await this.runValidations();
     
