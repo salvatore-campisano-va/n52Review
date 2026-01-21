@@ -1,31 +1,28 @@
 /**
- * HD Complete Request Button - Core Module
- * Handles validation and completion for HD (Help Desk) requests
+ * NCCHV Complete Request Button - Core Module
+ * Handles validation and completion for NCCHV requests
  */
 "use strict";
 
-var HDCompleteRequest = HDCompleteRequest || {};
+var CompleteRequest_NCCHV = CompleteRequest_NCCHV || {};
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-HDCompleteRequest.config = {
+CompleteRequest_NCCHV.config = {
     // Case note type code
     caseNoteTypeCode: 168790000,
     
-    // Workflow: Request - HD Route/Complete Request
-    completeWorkflowId: "F9A56996-0EA6-4029-95C5-06A67315EED9",
-    
-    // HD LOB GUID
-    hdLobId: "1bd4b15a-bfbb-e511-9414-0050568dc724"
+    // Workflow: Request - NCCHV Route/Complete Request
+    completeWorkflowId: "381d264d-ac3d-43b0-ba95-2ba2cb2a5506"
 };
 
 // ============================================================================
 // State
 // ============================================================================
 
-HDCompleteRequest.state = {
+CompleteRequest_NCCHV.state = {
     formContext: null,
     $button: null,
     currentUserId: null,
@@ -35,7 +32,9 @@ HDCompleteRequest.state = {
         veteran: null,
         type: null,
         area: null,
+        facility: null,
         resolution: null,
+        veteranOutcome: null,
         caseNoteMemo: null,
         caseNoteTemplate: null,
         lob: null,
@@ -43,7 +42,6 @@ HDCompleteRequest.state = {
         daysAtAssignment: null
     },
     
-    // Case note check
     caseNoteExistsToday: false
 };
 
@@ -51,7 +49,7 @@ HDCompleteRequest.state = {
 // Initialization
 // ============================================================================
 
-HDCompleteRequest.initialize = function() {
+CompleteRequest_NCCHV.initialize = function() {
     const self = this;
     
     this.$button = document.getElementById("CompleteRequest");
@@ -75,14 +73,14 @@ HDCompleteRequest.initialize = function() {
         }
     });
     
-    console.log("HD Complete Request button initialized");
+    console.log("NCCHV Complete Request button initialized");
 };
 
 // ============================================================================
 // UI Helper Functions
 // ============================================================================
 
-HDCompleteRequest.setButtonLoading = function(isLoading) {
+CompleteRequest_NCCHV.setButtonLoading = function(isLoading) {
     if (!this.$button) return;
     
     const spinner = this.$button.querySelector(".spinner-border");
@@ -98,18 +96,18 @@ HDCompleteRequest.setButtonLoading = function(isLoading) {
     }
 };
 
-HDCompleteRequest.showError = function(message) {
+CompleteRequest_NCCHV.showError = function(message) {
     const formContext = this.getFormContext();
-    formContext.ui.clearFormNotification("HD_ERROR");
-    formContext.ui.setFormNotification(message, "ERROR", "HD_ERROR");
+    formContext.ui.clearFormNotification("NCCHV_ERROR");
+    formContext.ui.setFormNotification(message, "ERROR", "NCCHV_ERROR");
 };
 
-HDCompleteRequest.clearError = function() {
+CompleteRequest_NCCHV.clearError = function() {
     const formContext = this.getFormContext();
-    formContext.ui.clearFormNotification("HD_ERROR");
+    formContext.ui.clearFormNotification("NCCHV_ERROR");
 };
 
-HDCompleteRequest.showAlert = async function(message, title = "Alert") {
+CompleteRequest_NCCHV.showAlert = async function(message, title = "Alert") {
     const xrm = this.getXrm();
     
     if (xrm.Navigation?.openAlertDialog) {
@@ -123,13 +121,13 @@ HDCompleteRequest.showAlert = async function(message, title = "Alert") {
 // Context Access Functions
 // ============================================================================
 
-HDCompleteRequest.getXrm = function() {
+CompleteRequest_NCCHV.getXrm = function() {
     if (parent.Xrm) return parent.Xrm;
     if (window.Xrm) return window.Xrm;
     throw new Error("Xrm is not available");
 };
 
-HDCompleteRequest.getFormContext = function() {
+CompleteRequest_NCCHV.getFormContext = function() {
     if (this.state.formContext) return this.state.formContext;
     
     if (parent.formContext) {
@@ -149,12 +147,12 @@ HDCompleteRequest.getFormContext = function() {
 // Utility Functions
 // ============================================================================
 
-HDCompleteRequest.cleanGuid = function(guid) {
+CompleteRequest_NCCHV.cleanGuid = function(guid) {
     if (!guid) return "";
     return guid.replace(/[{}]/g, "").toLowerCase();
 };
 
-HDCompleteRequest.getCurrentUserId = function() {
+CompleteRequest_NCCHV.getCurrentUserId = function() {
     if (this.state.currentUserId) return this.state.currentUserId;
     this.state.currentUserId = this.cleanGuid(
         this.getXrm().Utility.getGlobalContext().userSettings.userId
@@ -162,7 +160,7 @@ HDCompleteRequest.getCurrentUserId = function() {
     return this.state.currentUserId;
 };
 
-HDCompleteRequest.getLookupValue = function(attributeName) {
+CompleteRequest_NCCHV.getLookupValue = function(attributeName) {
     const formContext = this.getFormContext();
     const attribute = formContext.getAttribute(attributeName);
     if (!attribute) return null;
@@ -171,7 +169,7 @@ HDCompleteRequest.getLookupValue = function(attributeName) {
     return value[0];
 };
 
-HDCompleteRequest.getAttributeValue = function(attributeName) {
+CompleteRequest_NCCHV.getAttributeValue = function(attributeName) {
     const formContext = this.getFormContext();
     const attribute = formContext.getAttribute(attributeName);
     return attribute ? attribute.getValue() : null;
@@ -181,7 +179,7 @@ HDCompleteRequest.getAttributeValue = function(attributeName) {
 // Data Loading
 // ============================================================================
 
-HDCompleteRequest.loadFormData = function() {
+CompleteRequest_NCCHV.loadFormData = function() {
     const formContext = this.getFormContext();
     const state = this.state;
     
@@ -189,7 +187,9 @@ HDCompleteRequest.loadFormData = function() {
     state.request.veteran = this.getLookupValue("customerid");
     state.request.type = this.getLookupValue("vhacrm_typeintersectionid");
     state.request.area = this.getLookupValue("vhacrm_areaintersectionid");
+    state.request.facility = this.getLookupValue("vhacrm_facilityid");
     state.request.resolution = this.getLookupValue("vhacrm_resolutionintersectionid");
+    state.request.veteranOutcome = this.getLookupValue("vhacrm_veteranoutcomeid");
     state.request.caseNoteMemo = this.getAttributeValue("vhacrm_casenotes_memo");
     state.request.caseNoteTemplate = this.getLookupValue("vhacrm_casenotetemplateid");
     state.request.lob = this.getLookupValue("vhacrm_lobid");
@@ -197,7 +197,7 @@ HDCompleteRequest.loadFormData = function() {
     state.request.daysAtAssignment = this.getAttributeValue("vhacrm_daysatassignment_number");
 };
 
-HDCompleteRequest.checkCaseNoteExistsToday = async function() {
+CompleteRequest_NCCHV.checkCaseNoteExistsToday = async function() {
     const requestId = this.state.request.id;
     const ownerId = this.getCurrentUserId();
     
@@ -222,19 +222,38 @@ HDCompleteRequest.checkCaseNoteExistsToday = async function() {
 // Validation
 // ============================================================================
 
-HDCompleteRequest.isCurrentUserOwner = function() {
+CompleteRequest_NCCHV.isCurrentUserOwner = function() {
     const owner = this.getLookupValue("ownerid");
     if (!owner) return false;
     return this.cleanGuid(owner.id) === this.getCurrentUserId();
 };
 
-HDCompleteRequest.runValidations = function() {
+CompleteRequest_NCCHV.runValidations = function() {
     const errors = [];
     const state = this.state;
     
-    // Case Note is required (memo OR existing today)
+    if (!state.request.type) {
+        errors.push("Type is required to resolve a Request.");
+    }
+    
+    if (!state.request.area) {
+        errors.push("Area is required to resolve a Request.");
+    }
+    
+    if (!state.request.facility) {
+        errors.push("Facility is required to resolve a Request.");
+    }
+    
+    if (!state.request.veteran) {
+        errors.push("Veteran is required to resolve a Request.");
+    }
+    
+    if (!state.request.veteranOutcome) {
+        errors.push("Veteran Outcome is required to resolve a Request.");
+    }
+    
     if (!state.request.caseNoteMemo && !state.caseNoteExistsToday) {
-        errors.push("A completed case note is required to complete the request.");
+        errors.push("Case Note is required to resolve a Request.");
     }
     
     return errors;
@@ -244,7 +263,7 @@ HDCompleteRequest.runValidations = function() {
 // Business Logic
 // ============================================================================
 
-HDCompleteRequest.buildCaseNoteName = function() {
+CompleteRequest_NCCHV.buildCaseNoteName = function() {
     const state = this.state;
     let name = "";
     
@@ -267,22 +286,18 @@ HDCompleteRequest.buildCaseNoteName = function() {
     return name;
 };
 
-HDCompleteRequest.createCaseNote = async function() {
+CompleteRequest_NCCHV.createCaseNote = async function() {
     if (!this.state.request.caseNoteMemo) return;
+    if (!this.state.request.veteran) return;
     
     const caseNote = {
         vhacrm_name: this.buildCaseNoteName(),
         vhacrm_casenotes_memo: this.state.request.caseNoteMemo,
         "vhacrm_requestid@odata.bind": `/incidents(${this.state.request.id})`,
+        "vhacrm_veteranid@odata.bind": `/contacts(${this.cleanGuid(this.state.request.veteran.id)})`,
         vhacrm_casenotetype_code: this.config.caseNoteTypeCode
     };
     
-    // Add veteran if present
-    if (this.state.request.veteran) {
-        caseNote["vhacrm_veteranid@odata.bind"] = `/contacts(${this.cleanGuid(this.state.request.veteran.id)})`;
-    }
-    
-    // Add template if present
     if (this.state.request.caseNoteTemplate) {
         caseNote["vhacrm_casenotetemplateid@odata.bind"] = 
             `/vhacrm_casenotetemplates(${this.cleanGuid(this.state.request.caseNoteTemplate.id)})`;
@@ -297,7 +312,31 @@ HDCompleteRequest.createCaseNote = async function() {
     }
 };
 
-HDCompleteRequest.executeWorkflow = async function(workflowId, targetId) {
+CompleteRequest_NCCHV.updateAuditRecord = async function() {
+    try {
+        const result = await this.getXrm().WebApi.retrieveMultipleRecords(
+            "vhacrm_requestroutingaudit",
+            `?$select=vhacrm_requestroutingauditid&$filter=_vhacrm_requestid_value eq '${this.state.request.id}'&$orderby=createdon desc&$top=1`
+        );
+        
+        if (result.entities.length === 0) return;
+        
+        const auditId = result.entities[0].vhacrm_requestroutingauditid;
+        
+        await this.getXrm().WebApi.updateRecord("vhacrm_requestroutingaudit", auditId, {
+            vhacrm_completedon_date: new Date().toISOString(),
+            vhacrm_daysassigned_number: this.state.request.daysAtAssignment,
+            statecode: 1,
+            statuscode: 2
+        });
+        
+        console.log("Audit record updated:", auditId);
+    } catch (error) {
+        console.error("Error updating audit record:", error);
+    }
+};
+
+CompleteRequest_NCCHV.executeWorkflow = async function(workflowId, targetId) {
     const request = {
         entity: {
             entityType: "workflow",
@@ -327,17 +366,25 @@ HDCompleteRequest.executeWorkflow = async function(workflowId, targetId) {
     console.log(`Workflow executed successfully: ${workflowId}`);
 };
 
-HDCompleteRequest.saveAndClose = async function() {
+CompleteRequest_NCCHV.saveAndClose = async function() {
+    const formContext = this.getFormContext();
+    
     try {
-        await this.getFormContext().data.save();
-        this.closeForm();
+        await formContext.data.save();
+        
+        const xrm = this.getXrm();
+        if (xrm.Navigation?.navigateBack) {
+            xrm.Navigation.navigateBack();
+        } else {
+            formContext.ui.close();
+        }
     } catch (error) {
         console.error("Error saving record:", error);
         throw new Error("Failed to save the record.");
     }
 };
 
-HDCompleteRequest.closeForm = function() {
+CompleteRequest_NCCHV.closeForm = function() {
     const xrm = this.getXrm();
     if (xrm.Navigation?.navigateBack) {
         xrm.Navigation.navigateBack();
@@ -350,7 +397,7 @@ HDCompleteRequest.closeForm = function() {
 // Main Execution Flow
 // ============================================================================
 
-HDCompleteRequest.execute = async function() {
+CompleteRequest_NCCHV.execute = async function() {
     this.clearError();
     
     // Pre-validation: Resolution required
@@ -368,7 +415,7 @@ HDCompleteRequest.execute = async function() {
     // Load form data
     this.loadFormData();
     
-    // Load additional data for validation
+    // Check for existing case notes created today
     await this.checkCaseNoteExistsToday();
     
     // Run validations
@@ -384,19 +431,17 @@ HDCompleteRequest.execute = async function() {
         // Create case note if memo is populated
         await this.createCaseNote();
         
+        // Update audit record
+        await this.updateAuditRecord();
+        
         // Save form so workflow can read latest values
         await this.getFormContext().data.save();
         
-        // Execute complete workflow (only for HD LOB)
-        if (this.state.request.lob) {
-            const lobId = this.cleanGuid(this.state.request.lob.id);
-            if (lobId === this.config.hdLobId) {
-                await this.executeWorkflow(this.config.completeWorkflowId, this.state.request.id);
-            }
-        }
+        // Execute complete workflow: Request - NCCHV Route/Complete Request
+        await this.executeWorkflow(this.config.completeWorkflowId, this.state.request.id);
         
         // Close form
-        this.closeForm();
+        await this.closeForm();
         
     } catch (error) {
         console.error("Error completing request:", error);
@@ -409,5 +454,5 @@ HDCompleteRequest.execute = async function() {
 // ============================================================================
 
 document.addEventListener("DOMContentLoaded", function() {
-    HDCompleteRequest.initialize();
+    CompleteRequest_NCCHV.initialize();
 });

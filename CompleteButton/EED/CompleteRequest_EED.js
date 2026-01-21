@@ -1,28 +1,43 @@
 /**
- * NCCHV Complete Request Button - Core Module
- * Handles validation and completion for NCCHV requests
+ * EED Complete Request Button - Core Module
+ * Handles validation and completion for EED (Enrollment Eligibility Division) requests
  */
 "use strict";
 
-var NCCHVCompleteRequest = NCCHVCompleteRequest || {};
+var CompleteRequest_EED = CompleteRequest_EED || {};
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-NCCHVCompleteRequest.config = {
+CompleteRequest_EED.config = {
     // Case note type code
     caseNoteTypeCode: 168790000,
     
-    // Workflow: Request - NCCHV Route/Complete Request
-    completeWorkflowId: "381d264d-ac3d-43b0-ba95-2ba2cb2a5506"
+    // Workflow: EED-Request Complete Request
+    completeWorkflowId: "68E7DAE8-93A7-4F73-AFB4-77C565E211CE",
+    
+    // Workflow: Request - Deactivate
+    deactivateWorkflowId: "579F4A5D-E67E-404E-AA3A-896C3D5392FC",
+    
+    // Placeholder Veteran GUID (No Veteran, No Veteran)
+    placeholderVeteranId: "1b8680e1-8d87-e611-9422-0050568dade6",
+    
+    // Special resolution names
+    resolutions: {
+        createdInError: "Created in Error",
+        pendingFutureRAD: "Pending Future RAD"
+    },
+    
+    // HEC Alert completed status
+    hecAlertCompletedStatusCode: 713770006
 };
 
 // ============================================================================
 // State
 // ============================================================================
 
-NCCHVCompleteRequest.state = {
+CompleteRequest_EED.state = {
     formContext: null,
     $button: null,
     currentUserId: null,
@@ -34,14 +49,30 @@ NCCHVCompleteRequest.state = {
         area: null,
         facility: null,
         resolution: null,
-        veteranOutcome: null,
+        resolutionName: null,
+        verificationMethod: null,
         caseNoteMemo: null,
         caseNoteTemplate: null,
         lob: null,
         subArea: null,
-        daysAtAssignment: null
+        radDate: null,
+        reevaluateDate: null,
+        noContactRequired: null,
+        hecAlert: null
     },
     
+    // Resolution flags
+    isCreatedInError: false,
+    isPendingFutureRAD: false,
+    isPlaceholderVeteran: false,
+    
+    // Activity counts
+    counts: {
+        correspondence: 0,
+        phoneCalls: 0
+    },
+    
+    // Case note check
     caseNoteExistsToday: false
 };
 
@@ -49,7 +80,7 @@ NCCHVCompleteRequest.state = {
 // Initialization
 // ============================================================================
 
-NCCHVCompleteRequest.initialize = function() {
+CompleteRequest_EED.initialize = function() {
     const self = this;
     
     this.$button = document.getElementById("CompleteRequest");
@@ -73,14 +104,14 @@ NCCHVCompleteRequest.initialize = function() {
         }
     });
     
-    console.log("NCCHV Complete Request button initialized");
+    console.log("EED Complete Request button initialized");
 };
 
 // ============================================================================
 // UI Helper Functions
 // ============================================================================
 
-NCCHVCompleteRequest.setButtonLoading = function(isLoading) {
+CompleteRequest_EED.setButtonLoading = function(isLoading) {
     if (!this.$button) return;
     
     const spinner = this.$button.querySelector(".spinner-border");
@@ -96,18 +127,18 @@ NCCHVCompleteRequest.setButtonLoading = function(isLoading) {
     }
 };
 
-NCCHVCompleteRequest.showError = function(message) {
+CompleteRequest_EED.showError = function(message) {
     const formContext = this.getFormContext();
-    formContext.ui.clearFormNotification("NCCHV_ERROR");
-    formContext.ui.setFormNotification(message, "ERROR", "NCCHV_ERROR");
+    formContext.ui.clearFormNotification("EED_ERROR");
+    formContext.ui.setFormNotification(message, "ERROR", "EED_ERROR");
 };
 
-NCCHVCompleteRequest.clearError = function() {
+CompleteRequest_EED.clearError = function() {
     const formContext = this.getFormContext();
-    formContext.ui.clearFormNotification("NCCHV_ERROR");
+    formContext.ui.clearFormNotification("EED_ERROR");
 };
 
-NCCHVCompleteRequest.showAlert = async function(message, title = "Alert") {
+CompleteRequest_EED.showAlert = async function(message, title = "Alert") {
     const xrm = this.getXrm();
     
     if (xrm.Navigation?.openAlertDialog) {
@@ -121,13 +152,13 @@ NCCHVCompleteRequest.showAlert = async function(message, title = "Alert") {
 // Context Access Functions
 // ============================================================================
 
-NCCHVCompleteRequest.getXrm = function() {
+CompleteRequest_EED.getXrm = function() {
     if (parent.Xrm) return parent.Xrm;
     if (window.Xrm) return window.Xrm;
     throw new Error("Xrm is not available");
 };
 
-NCCHVCompleteRequest.getFormContext = function() {
+CompleteRequest_EED.getFormContext = function() {
     if (this.state.formContext) return this.state.formContext;
     
     if (parent.formContext) {
@@ -147,12 +178,12 @@ NCCHVCompleteRequest.getFormContext = function() {
 // Utility Functions
 // ============================================================================
 
-NCCHVCompleteRequest.cleanGuid = function(guid) {
+CompleteRequest_EED.cleanGuid = function(guid) {
     if (!guid) return "";
     return guid.replace(/[{}]/g, "").toLowerCase();
 };
 
-NCCHVCompleteRequest.getCurrentUserId = function() {
+CompleteRequest_EED.getCurrentUserId = function() {
     if (this.state.currentUserId) return this.state.currentUserId;
     this.state.currentUserId = this.cleanGuid(
         this.getXrm().Utility.getGlobalContext().userSettings.userId
@@ -160,7 +191,7 @@ NCCHVCompleteRequest.getCurrentUserId = function() {
     return this.state.currentUserId;
 };
 
-NCCHVCompleteRequest.getLookupValue = function(attributeName) {
+CompleteRequest_EED.getLookupValue = function(attributeName) {
     const formContext = this.getFormContext();
     const attribute = formContext.getAttribute(attributeName);
     if (!attribute) return null;
@@ -169,7 +200,7 @@ NCCHVCompleteRequest.getLookupValue = function(attributeName) {
     return value[0];
 };
 
-NCCHVCompleteRequest.getAttributeValue = function(attributeName) {
+CompleteRequest_EED.getAttributeValue = function(attributeName) {
     const formContext = this.getFormContext();
     const attribute = formContext.getAttribute(attributeName);
     return attribute ? attribute.getValue() : null;
@@ -179,7 +210,7 @@ NCCHVCompleteRequest.getAttributeValue = function(attributeName) {
 // Data Loading
 // ============================================================================
 
-NCCHVCompleteRequest.loadFormData = function() {
+CompleteRequest_EED.loadFormData = function() {
     const formContext = this.getFormContext();
     const state = this.state;
     
@@ -189,15 +220,89 @@ NCCHVCompleteRequest.loadFormData = function() {
     state.request.area = this.getLookupValue("vhacrm_areaintersectionid");
     state.request.facility = this.getLookupValue("vhacrm_facilityid");
     state.request.resolution = this.getLookupValue("vhacrm_resolutionintersectionid");
-    state.request.veteranOutcome = this.getLookupValue("vhacrm_veteranoutcomeid");
+    state.request.verificationMethod = this.getLookupValue("vhacrm_verificationmethodid");
     state.request.caseNoteMemo = this.getAttributeValue("vhacrm_casenotes_memo");
     state.request.caseNoteTemplate = this.getLookupValue("vhacrm_casenotetemplateid");
     state.request.lob = this.getLookupValue("vhacrm_lobid");
     state.request.subArea = this.getLookupValue("vhacrm_subareaintersectionid");
-    state.request.daysAtAssignment = this.getAttributeValue("vhacrm_daysatassignment_number");
+    state.request.radDate = this.getAttributeValue("vhacrm_raddate_date");
+    state.request.reevaluateDate = this.getAttributeValue("vhacrm_reevaluatedate_date");
+    state.request.noContactRequired = this.getAttributeValue("vhacrm_nocontactrequired_bool");
+    state.request.hecAlert = this.getLookupValue("vhacrm_hecalertid");
+    
+    // Set placeholder veteran flag
+    if (state.request.veteran) {
+        state.isPlaceholderVeteran = this.cleanGuid(state.request.veteran.id) === this.config.placeholderVeteranId;
+    }
 };
 
-NCCHVCompleteRequest.checkCaseNoteExistsToday = async function() {
+CompleteRequest_EED.loadResolutionName = async function() {
+    const resolution = this.state.request.resolution;
+    if (!resolution) return;
+    
+    try {
+        const result = await this.getXrm().WebApi.retrieveRecord(
+            "vhacrm_resolutionintersection",
+            this.cleanGuid(resolution.id),
+            "?$select=vhacrm_name"
+        );
+        
+        this.state.request.resolutionName = result.vhacrm_name;
+        
+        // Set resolution flags
+        const name = result.vhacrm_name;
+        this.state.isCreatedInError = name === this.config.resolutions.createdInError;
+        this.state.isPendingFutureRAD = name === this.config.resolutions.pendingFutureRAD;
+        
+    } catch (error) {
+        console.error("Error loading resolution name:", error);
+    }
+};
+
+CompleteRequest_EED.loadActivityCounts = async function() {
+    const requestId = this.state.request.id;
+    
+    try {
+        const correspondenceResult = await this.getRelatedEntityCount("vhacrm_correspondence", requestId);
+        
+        const phoneCallResult = await this.getPhoneCallCount(requestId);
+        
+        this.state.counts.correspondence = correspondenceResult;
+        this.state.counts.phoneCalls = phoneCallResult;
+    } catch (error) {
+        console.error("Error loading activity counts:", error);
+        this.state.counts.correspondence = 0;
+        this.state.counts.phoneCalls = 0;
+    }
+};
+
+CompleteRequest_EED.getRelatedEntityCount = async function(entityName, requestId) {
+    try {
+        const result = await this.getXrm().WebApi.retrieveMultipleRecords(
+            entityName,
+            `?$filter=_vhacrm_requestid_value eq '${requestId}'&$select=${entityName}id`
+        );
+        return result.entities.length;
+    } catch (error) {
+        console.error(`Error getting ${entityName} count: `, error);
+        return 0;
+    }
+};
+
+CompleteRequest_EED.getPhoneCallCount = async function(requestId) {
+    try {
+        const result = await this.getXrm().WebApi.retrieveMultipleRecords(
+            "phonecall",
+            `?$filter=_vhacrm_requestid_value eq '${requestId}'&$select=activityid`
+        );
+        return result.entities.length;
+    } catch (error) {
+        console.error("Error getting phone call count:", error);
+        return 0;
+    }
+};
+
+CompleteRequest_EED.checkCaseNoteExistsToday = async function() {
     const requestId = this.state.request.id;
     const ownerId = this.getCurrentUserId();
     
@@ -222,38 +327,56 @@ NCCHVCompleteRequest.checkCaseNoteExistsToday = async function() {
 // Validation
 // ============================================================================
 
-NCCHVCompleteRequest.isCurrentUserOwner = function() {
+CompleteRequest_EED.isCurrentUserOwner = function() {
     const owner = this.getLookupValue("ownerid");
     if (!owner) return false;
     return this.cleanGuid(owner.id) === this.getCurrentUserId();
 };
 
-NCCHVCompleteRequest.runValidations = function() {
+CompleteRequest_EED.runValidations = function() {
     const errors = [];
     const state = this.state;
     
-    if (!state.request.type) {
-        errors.push("Type is required to resolve a Request.");
+    // Skip most validations for Created in Error resolution
+    if (state.isCreatedInError) {
+        return errors;
     }
     
-    if (!state.request.area) {
-        errors.push("Area is required to resolve a Request.");
+    // Veteran is required unless customer is the placeholder veteran
+    if (!state.isPlaceholderVeteran && !state.request.veteran) {
+        errors.push("Veteran is required to complete the request.");
     }
     
-    if (!state.request.facility) {
-        errors.push("Facility is required to resolve a Request.");
+    // Verification Method is required unless customer is placeholder veteran
+    if (!state.isPlaceholderVeteran) {
+        if (!state.request.verificationMethod) {
+            errors.push("Verification Method is required to complete the request.");
+        }
     }
     
-    if (!state.request.veteran) {
-        errors.push("Veteran is required to resolve a Request.");
+    // Contact Method is required unless:
+    // - No Contact Required flag is set
+    // - Customer is placeholder veteran
+    if (!state.isPlaceholderVeteran) {
+        const hasContact = state.counts.correspondence > 0 || state.counts.phoneCalls > 0;
+        if (!hasContact && !state.request.noContactRequired) {
+            errors.push("Veteran Contact Method is Required");
+        }
     }
     
-    if (!state.request.veteranOutcome) {
-        errors.push("Veteran Outcome is required to resolve a Request.");
+    // Pending Future RAD validations
+    if (state.isPendingFutureRAD) {
+        if (!state.request.radDate) {
+            errors.push("RAD Date is required to complete the request.");
+        }
+        if (!state.request.reevaluateDate) {
+            errors.push("Reevaluate Date is required to complete the request.");
+        }
     }
     
+    // Case Note is required (memo OR existing today)
     if (!state.request.caseNoteMemo && !state.caseNoteExistsToday) {
-        errors.push("Case Note is required to resolve a Request.");
+        errors.push("A completed Case Note is required to complete the request.");
     }
     
     return errors;
@@ -263,7 +386,7 @@ NCCHVCompleteRequest.runValidations = function() {
 // Business Logic
 // ============================================================================
 
-NCCHVCompleteRequest.buildCaseNoteName = function() {
+CompleteRequest_EED.buildCaseNoteName = function() {
     const state = this.state;
     let name = "";
     
@@ -286,18 +409,28 @@ NCCHVCompleteRequest.buildCaseNoteName = function() {
     return name;
 };
 
-NCCHVCompleteRequest.createCaseNote = async function() {
+CompleteRequest_EED.createCaseNote = async function() {
     if (!this.state.request.caseNoteMemo) return;
-    if (!this.state.request.veteran) return;
+    if (!this.state.request.resolution) return;
     
     const caseNote = {
         vhacrm_name: this.buildCaseNoteName(),
         vhacrm_casenotes_memo: this.state.request.caseNoteMemo,
         "vhacrm_requestid@odata.bind": `/incidents(${this.state.request.id})`,
-        "vhacrm_veteranid@odata.bind": `/contacts(${this.cleanGuid(this.state.request.veteran.id)})`,
         vhacrm_casenotetype_code: this.config.caseNoteTypeCode
     };
     
+    // Add veteran if present
+    if (this.state.request.veteran) {
+        caseNote["vhacrm_veteranid@odata.bind"] = `/contacts(${this.cleanGuid(this.state.request.veteran.id)})`;
+    }
+    
+    // Add HEC Alert if present
+    if (this.state.request.hecAlert) {
+        caseNote["vhacrm_hecalertid@odata.bind"] = `/vhacrm_hecalerts(${this.cleanGuid(this.state.request.hecAlert.id)})`;
+    }
+    
+    // Add template if present
     if (this.state.request.caseNoteTemplate) {
         caseNote["vhacrm_casenotetemplateid@odata.bind"] = 
             `/vhacrm_casenotetemplates(${this.cleanGuid(this.state.request.caseNoteTemplate.id)})`;
@@ -312,31 +445,64 @@ NCCHVCompleteRequest.createCaseNote = async function() {
     }
 };
 
-NCCHVCompleteRequest.updateAuditRecord = async function() {
+CompleteRequest_EED.updateIncidentCaseNoteFields = async function() {
+    // Copy case note memo to hidden field and clear template
     try {
-        const result = await this.getXrm().WebApi.retrieveMultipleRecords(
-            "vhacrm_requestroutingaudit",
-            `?$select=vhacrm_requestroutingauditid&$filter=_vhacrm_requestid_value eq '${this.state.request.id}'&$orderby=createdon desc&$top=1`
-        );
-        
-        if (result.entities.length === 0) return;
-        
-        const auditId = result.entities[0].vhacrm_requestroutingauditid;
-        
-        await this.getXrm().WebApi.updateRecord("vhacrm_requestroutingaudit", auditId, {
-            vhacrm_completedon_date: new Date().toISOString(),
-            vhacrm_daysassigned_number: this.state.request.daysAtAssignment,
-            statecode: 1,
-            statuscode: 2
+        await this.getXrm().WebApi.updateRecord("incident", this.state.request.id, {
+            vhacrm_casenotehidden: this.state.request.caseNoteMemo,
+            "vhacrm_casenotetemplateid@odata.bind": null
         });
-        
-        console.log("Audit record updated:", auditId);
+        console.log("Incident case note fields updated");
     } catch (error) {
-        console.error("Error updating audit record:", error);
+        console.error("Error updating incident case note fields:", error);
     }
 };
 
-NCCHVCompleteRequest.executeWorkflow = async function(workflowId, targetId) {
+CompleteRequest_EED.updateIncidentRecordUrl = async function() {
+    try {
+        // Get base URL from key value pair
+        const kvpResult = await this.getXrm().WebApi.retrieveMultipleRecords(
+            "bah_keyvaluepair",
+            "?$select=bah_stringvalue_text&$filter=bah_name_text eq 'base_url'&$top=1"
+        );
+        
+        if (kvpResult.entities.length === 0) {
+            console.warn("Base URL not found in key value pairs");
+            return;
+        }
+        
+        const baseUrl = kvpResult.entities[0].bah_stringvalue_text;
+        const recordUrl = `${baseUrl}/main.aspx?etn=incident&id=${this.state.request.id}&pagetype=entityrecord`;
+        
+        await this.getXrm().WebApi.updateRecord("incident", this.state.request.id, {
+            vhacrm_recordurl_memo: recordUrl
+        });
+        
+        console.log("Record URL updated");
+    } catch (error) {
+        console.error("Error updating record URL:", error);
+    }
+};
+
+CompleteRequest_EED.updateHecAlert = async function() {
+    if (!this.state.request.hecAlert) return;
+    
+    try {
+        await this.getXrm().WebApi.updateRecord(
+            "vhacrm_hecalert",
+            this.cleanGuid(this.state.request.hecAlert.id),
+            {
+                statecode: 1,
+                statuscode: this.config.hecAlertCompletedStatusCode
+            }
+        );
+        console.log("HEC Alert updated");
+    } catch (error) {
+        console.error("Error updating HEC Alert:", error);
+    }
+};
+
+CompleteRequest_EED.executeWorkflow = async function(workflowId, targetId) {
     const request = {
         entity: {
             entityType: "workflow",
@@ -366,25 +532,17 @@ NCCHVCompleteRequest.executeWorkflow = async function(workflowId, targetId) {
     console.log(`Workflow executed successfully: ${workflowId}`);
 };
 
-NCCHVCompleteRequest.saveAndClose = async function() {
-    const formContext = this.getFormContext();
-    
+CompleteRequest_EED.saveAndClose = async function() {
     try {
-        await formContext.data.save();
-        
-        const xrm = this.getXrm();
-        if (xrm.Navigation?.navigateBack) {
-            xrm.Navigation.navigateBack();
-        } else {
-            formContext.ui.close();
-        }
+        await this.getFormContext().data.save();
+        this.closeForm();
     } catch (error) {
         console.error("Error saving record:", error);
         throw new Error("Failed to save the record.");
     }
 };
 
-NCCHVCompleteRequest.closeForm = function() {
+CompleteRequest_EED.closeForm = function() {
     const xrm = this.getXrm();
     if (xrm.Navigation?.navigateBack) {
         xrm.Navigation.navigateBack();
@@ -397,7 +555,7 @@ NCCHVCompleteRequest.closeForm = function() {
 // Main Execution Flow
 // ============================================================================
 
-NCCHVCompleteRequest.execute = async function() {
+CompleteRequest_EED.execute = async function() {
     this.clearError();
     
     // Pre-validation: Resolution required
@@ -415,8 +573,26 @@ NCCHVCompleteRequest.execute = async function() {
     // Load form data
     this.loadFormData();
     
-    // Check for existing case notes created today
-    await this.checkCaseNoteExistsToday();
+    // Load resolution name to determine special handling
+    await this.loadResolutionName();
+    
+    // Handle "Created in Error" - just deactivate and close
+    if (this.state.isCreatedInError) {
+        try {
+            await this.executeWorkflow(this.config.deactivateWorkflowId, this.state.request.id);
+            await this.saveAndClose();
+        } catch (error) {
+            console.error("Error handling Created in Error:", error);
+            this.showError("An error occurred while processing the request.");
+        }
+        return;
+    }
+    
+    // Load additional data for validation
+    await Promise.all([
+        this.loadActivityCounts(),
+        this.checkCaseNoteExistsToday()
+    ]);
     
     // Run validations
     const validationErrors = this.runValidations();
@@ -431,17 +607,23 @@ NCCHVCompleteRequest.execute = async function() {
         // Create case note if memo is populated
         await this.createCaseNote();
         
-        // Update audit record
-        await this.updateAuditRecord();
+        // Update incident case note fields
+        await this.updateIncidentCaseNoteFields();
+        
+        // Update incident with record URL
+        await this.updateIncidentRecordUrl();
+        
+        // Update HEC Alert if linked
+        await this.updateHecAlert();
         
         // Save form so workflow can read latest values
         await this.getFormContext().data.save();
         
-        // Execute complete workflow: Request - NCCHV Route/Complete Request
+        // Execute complete workflow
         await this.executeWorkflow(this.config.completeWorkflowId, this.state.request.id);
         
         // Close form
-        await this.closeForm();
+        this.closeForm();
         
     } catch (error) {
         console.error("Error completing request:", error);
@@ -454,5 +636,5 @@ NCCHVCompleteRequest.execute = async function() {
 // ============================================================================
 
 document.addEventListener("DOMContentLoaded", function() {
-    NCCHVCompleteRequest.initialize();
+    CompleteRequest_EED.initialize();
 });

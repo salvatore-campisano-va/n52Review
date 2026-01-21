@@ -4,13 +4,13 @@
  */
 "use strict";
 
-var IVDCompleteRequest = IVDCompleteRequest || {};
+var CompleteRequest_IVD = CompleteRequest_IVD || {};
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-IVDCompleteRequest.config = {
+CompleteRequest_IVD.config = {
     workflows: {
         // Workflow "Request - Deactivate"
         deactivate: "579F4A5D-E67E-404E-AA3A-896C3D5392FC", 
@@ -28,7 +28,7 @@ IVDCompleteRequest.config = {
 // State
 // ============================================================================
 
-IVDCompleteRequest.state = {
+CompleteRequest_IVD.state = {
     formContext: null,
     $button: null,
     currentUserId: null,
@@ -60,7 +60,7 @@ IVDCompleteRequest.state = {
 // Initialization
 // ============================================================================
 
-IVDCompleteRequest.initialize = function() {
+CompleteRequest_IVD.initialize = function() {
     const self = this;
     
     this.$button = document.getElementById("CompleteRequest");
@@ -91,7 +91,7 @@ IVDCompleteRequest.initialize = function() {
 // UI Helper Functions
 // ============================================================================
 
-IVDCompleteRequest.setButtonLoading = function(isLoading) {
+CompleteRequest_IVD.setButtonLoading = function(isLoading) {
     if (!this.$button) return;
     
     const spinner = this.$button.querySelector(".spinner-border");
@@ -107,18 +107,18 @@ IVDCompleteRequest.setButtonLoading = function(isLoading) {
     }
 };
 
-IVDCompleteRequest.showError = function(message) {
+CompleteRequest_IVD.showError = function(message) {
     const formContext = this.getFormContext();
     formContext.ui.clearFormNotification("IVD_ERROR");
     formContext.ui.setFormNotification(message, "ERROR", "IVD_ERROR");
 };
 
-IVDCompleteRequest.clearError = function() {
+CompleteRequest_IVD.clearError = function() {
     const formContext = this.getFormContext();
     formContext.ui.clearFormNotification("IVD_ERROR");
 };
 
-IVDCompleteRequest.showAlert = async function(message, title = "Alert") {
+CompleteRequest_IVD.showAlert = async function(message, title = "Alert") {
     const xrm = this.getXrm();
     
     if (xrm.Navigation?.openAlertDialog) {
@@ -132,13 +132,13 @@ IVDCompleteRequest.showAlert = async function(message, title = "Alert") {
 // Context Access Functions
 // ============================================================================
 
-IVDCompleteRequest.getXrm = function() {
+CompleteRequest_IVD.getXrm = function() {
     if (parent.Xrm) return parent.Xrm;
     if (window.Xrm) return window.Xrm;
     throw new Error("Xrm is not available");
 };
 
-IVDCompleteRequest.getFormContext = function() {
+CompleteRequest_IVD.getFormContext = function() {
     if (this.state.formContext) return this.state.formContext;
     
     if (parent.formContext) {
@@ -158,12 +158,12 @@ IVDCompleteRequest.getFormContext = function() {
 // Utility Functions
 // ============================================================================
 
-IVDCompleteRequest.cleanGuid = function(guid) {
+CompleteRequest_IVD.cleanGuid = function(guid) {
     if (!guid) return "";
     return guid.replace(/[{}]/g, "").toLowerCase();
 };
 
-IVDCompleteRequest.getCurrentUserId = function() {
+CompleteRequest_IVD.getCurrentUserId = function() {
     if (this.state.currentUserId) return this.state.currentUserId;
     this.state.currentUserId = this.cleanGuid(
         this.getXrm().Utility.getGlobalContext().userSettings.userId
@@ -171,7 +171,7 @@ IVDCompleteRequest.getCurrentUserId = function() {
     return this.state.currentUserId;
 };
 
-IVDCompleteRequest.getLookupValue = function(attributeName) {
+CompleteRequest_IVD.getLookupValue = function(attributeName) {
     const formContext = this.getFormContext();
     const attribute = formContext.getAttribute(attributeName);
     if (!attribute) return null;
@@ -180,7 +180,7 @@ IVDCompleteRequest.getLookupValue = function(attributeName) {
     return value[0];
 };
 
-IVDCompleteRequest.getAttributeValue = function(attributeName) {
+CompleteRequest_IVD.getAttributeValue = function(attributeName) {
     const formContext = this.getFormContext();
     const attribute = formContext.getAttribute(attributeName);
     return attribute ? attribute.getValue() : null;
@@ -190,7 +190,7 @@ IVDCompleteRequest.getAttributeValue = function(attributeName) {
 // Data Loading
 // ============================================================================
 
-IVDCompleteRequest.loadFormData = function() {
+CompleteRequest_IVD.loadFormData = function() {
     const formContext = this.getFormContext();
     const state = this.state;
     
@@ -205,7 +205,7 @@ IVDCompleteRequest.loadFormData = function() {
     state.request.daysAtAssignment = this.getAttributeValue("vhacrm_daysatassignment_number");
 };
 
-IVDCompleteRequest.loadVerificationMethod = async function() {
+CompleteRequest_IVD.loadVerificationMethod = async function() {
     const requestId = this.state.request.id;
     if (!requestId) return;
     
@@ -235,7 +235,7 @@ IVDCompleteRequest.loadVerificationMethod = async function() {
     }
 };
 
-IVDCompleteRequest.loadResolutionName = async function() {
+CompleteRequest_IVD.loadResolutionName = async function() {
     if (!this.state.request.resolution) return;
     
     const resolutionId = this.cleanGuid(this.state.request.resolution.id);
@@ -263,13 +263,13 @@ IVDCompleteRequest.loadResolutionName = async function() {
 // Validation
 // ============================================================================
 
-IVDCompleteRequest.isCurrentUserOwner = function() {
+CompleteRequest_IVD.isCurrentUserOwner = function() {
     const owner = this.getLookupValue("ownerid");
     if (!owner) return false;
     return this.cleanGuid(owner.id) === this.getCurrentUserId();
 };
 
-IVDCompleteRequest.runValidations = async function() {
+CompleteRequest_IVD.runValidations = async function() {
     const errors = [];
     const state = this.state;
     const flags = state.flags;
@@ -302,7 +302,7 @@ IVDCompleteRequest.runValidations = async function() {
 // Business Logic
 // ============================================================================
 
-IVDCompleteRequest.updateAuditRecord = async function() {
+CompleteRequest_IVD.updateAuditRecord = async function() {
     try {
         const result = await this.getXrm().WebApi.retrieveMultipleRecords(
             "vhacrm_requestroutingaudit",
@@ -326,7 +326,7 @@ IVDCompleteRequest.updateAuditRecord = async function() {
     }
 };
 
-IVDCompleteRequest.callEnrollmentStatusAPI = async function() {
+CompleteRequest_IVD.callEnrollmentStatusAPI = async function() {
     if (!this.state.request.icn) return;
     
     try {
@@ -345,7 +345,7 @@ IVDCompleteRequest.callEnrollmentStatusAPI = async function() {
     }
 };
 
-IVDCompleteRequest.updateHecAlert = async function() {
+CompleteRequest_IVD.updateHecAlert = async function() {
     if (!this.state.request.hecAlert) return;
     
     const hecAlertId = this.cleanGuid(this.state.request.hecAlert.id);
@@ -362,7 +362,7 @@ IVDCompleteRequest.updateHecAlert = async function() {
     }
 };
 
-IVDCompleteRequest.updateRequestRecord = async function() {
+CompleteRequest_IVD.updateRequestRecord = async function() {
     try {
         const baseUrl = await this.getKeyValuePair("base_url");
         const recordUrl = baseUrl 
@@ -382,7 +382,7 @@ IVDCompleteRequest.updateRequestRecord = async function() {
 // API Helper Functions
 // ============================================================================
 
-IVDCompleteRequest.updateRecord = async function(entityName, id, data) {
+CompleteRequest_IVD.updateRecord = async function(entityName, id, data) {
     try {
         await this.getXrm().WebApi.updateRecord(entityName, id, data);
     } catch (error) {
@@ -391,7 +391,7 @@ IVDCompleteRequest.updateRecord = async function(entityName, id, data) {
     }
 };
 
-IVDCompleteRequest.getKeyValuePair = async function(keyName) {
+CompleteRequest_IVD.getKeyValuePair = async function(keyName) {
     try {
         const result = await this.getXrm().WebApi.retrieveMultipleRecords(
             "bah_keyvaluepair",
@@ -404,7 +404,7 @@ IVDCompleteRequest.getKeyValuePair = async function(keyName) {
     }
 };
 
-IVDCompleteRequest.executeWorkflow = async function(workflowId, targetId) {
+CompleteRequest_IVD.executeWorkflow = async function(workflowId, targetId) {
     const request = {
         entity: {
             entityType: "workflow",
@@ -438,7 +438,7 @@ IVDCompleteRequest.executeWorkflow = async function(workflowId, targetId) {
 // Main Execution Flow
 // ============================================================================
 
-IVDCompleteRequest.execute = async function() {
+CompleteRequest_IVD.execute = async function() {
     this.clearError();
     
     const resolution = this.getLookupValue("vhacrm_resolutionintersectionid");
@@ -474,7 +474,7 @@ IVDCompleteRequest.execute = async function() {
     await this.completeRequest();
 };
 
-IVDCompleteRequest.handleCreatedInError = async function() {
+CompleteRequest_IVD.handleCreatedInError = async function() {
     try {
         await this.executeWorkflow(this.config.workflows.deactivate, this.state.request.id);
         
@@ -489,7 +489,7 @@ IVDCompleteRequest.handleCreatedInError = async function() {
     }
 };
 
-IVDCompleteRequest.completeRequest = async function() {
+CompleteRequest_IVD.completeRequest = async function() {
     try {
         await this.updateAuditRecord();
         await this.callEnrollmentStatusAPI();
@@ -509,7 +509,7 @@ IVDCompleteRequest.completeRequest = async function() {
     }
 };
 
-IVDCompleteRequest.saveAndClose = async function() {
+CompleteRequest_IVD.saveAndClose = async function() {
     const formContext = this.getFormContext();
     
     try {
@@ -532,5 +532,5 @@ IVDCompleteRequest.saveAndClose = async function() {
 // ============================================================================
 
 document.addEventListener("DOMContentLoaded", function() {
-    IVDCompleteRequest.initialize();
+    CompleteRequest_IVD.initialize();
 });

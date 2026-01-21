@@ -1,43 +1,31 @@
 /**
- * EED Complete Request Button - Core Module
- * Handles validation and completion for EED (Enrollment Eligibility Division) requests
+ * HD Complete Request Button - Core Module
+ * Handles validation and completion for HD (Help Desk) requests
  */
 "use strict";
 
-var EEDCompleteRequest = EEDCompleteRequest || {};
+var CompleteRequest_HD = CompleteRequest_HD || {};
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-EEDCompleteRequest.config = {
+CompleteRequest_HD.config = {
     // Case note type code
     caseNoteTypeCode: 168790000,
     
-    // Workflow: EED-Request Complete Request
-    completeWorkflowId: "68E7DAE8-93A7-4F73-AFB4-77C565E211CE",
+    // Workflow: Request - HD Route/Complete Request
+    completeWorkflowId: "F9A56996-0EA6-4029-95C5-06A67315EED9",
     
-    // Workflow: Request - Deactivate
-    deactivateWorkflowId: "579F4A5D-E67E-404E-AA3A-896C3D5392FC",
-    
-    // Placeholder Veteran GUID (No Veteran, No Veteran)
-    placeholderVeteranId: "1b8680e1-8d87-e611-9422-0050568dade6",
-    
-    // Special resolution names
-    resolutions: {
-        createdInError: "Created in Error",
-        pendingFutureRAD: "Pending Future RAD"
-    },
-    
-    // HEC Alert completed status
-    hecAlertCompletedStatusCode: 713770006
+    // HD LOB GUID
+    hdLobId: "1bd4b15a-bfbb-e511-9414-0050568dc724"
 };
 
 // ============================================================================
 // State
 // ============================================================================
 
-EEDCompleteRequest.state = {
+CompleteRequest_HD.state = {
     formContext: null,
     $button: null,
     currentUserId: null,
@@ -47,29 +35,12 @@ EEDCompleteRequest.state = {
         veteran: null,
         type: null,
         area: null,
-        facility: null,
         resolution: null,
-        resolutionName: null,
-        verificationMethod: null,
         caseNoteMemo: null,
         caseNoteTemplate: null,
         lob: null,
         subArea: null,
-        radDate: null,
-        reevaluateDate: null,
-        noContactRequired: null,
-        hecAlert: null
-    },
-    
-    // Resolution flags
-    isCreatedInError: false,
-    isPendingFutureRAD: false,
-    isPlaceholderVeteran: false,
-    
-    // Activity counts
-    counts: {
-        correspondence: 0,
-        phoneCalls: 0
+        daysAtAssignment: null
     },
     
     // Case note check
@@ -80,7 +51,7 @@ EEDCompleteRequest.state = {
 // Initialization
 // ============================================================================
 
-EEDCompleteRequest.initialize = function() {
+CompleteRequest_HD.initialize = function() {
     const self = this;
     
     this.$button = document.getElementById("CompleteRequest");
@@ -104,14 +75,14 @@ EEDCompleteRequest.initialize = function() {
         }
     });
     
-    console.log("EED Complete Request button initialized");
+    console.log("HD Complete Request button initialized");
 };
 
 // ============================================================================
 // UI Helper Functions
 // ============================================================================
 
-EEDCompleteRequest.setButtonLoading = function(isLoading) {
+CompleteRequest_HD.setButtonLoading = function(isLoading) {
     if (!this.$button) return;
     
     const spinner = this.$button.querySelector(".spinner-border");
@@ -127,18 +98,18 @@ EEDCompleteRequest.setButtonLoading = function(isLoading) {
     }
 };
 
-EEDCompleteRequest.showError = function(message) {
+CompleteRequest_HD.showError = function(message) {
     const formContext = this.getFormContext();
-    formContext.ui.clearFormNotification("EED_ERROR");
-    formContext.ui.setFormNotification(message, "ERROR", "EED_ERROR");
+    formContext.ui.clearFormNotification("HD_ERROR");
+    formContext.ui.setFormNotification(message, "ERROR", "HD_ERROR");
 };
 
-EEDCompleteRequest.clearError = function() {
+CompleteRequest_HD.clearError = function() {
     const formContext = this.getFormContext();
-    formContext.ui.clearFormNotification("EED_ERROR");
+    formContext.ui.clearFormNotification("HD_ERROR");
 };
 
-EEDCompleteRequest.showAlert = async function(message, title = "Alert") {
+CompleteRequest_HD.showAlert = async function(message, title = "Alert") {
     const xrm = this.getXrm();
     
     if (xrm.Navigation?.openAlertDialog) {
@@ -152,13 +123,13 @@ EEDCompleteRequest.showAlert = async function(message, title = "Alert") {
 // Context Access Functions
 // ============================================================================
 
-EEDCompleteRequest.getXrm = function() {
+CompleteRequest_HD.getXrm = function() {
     if (parent.Xrm) return parent.Xrm;
     if (window.Xrm) return window.Xrm;
     throw new Error("Xrm is not available");
 };
 
-EEDCompleteRequest.getFormContext = function() {
+CompleteRequest_HD.getFormContext = function() {
     if (this.state.formContext) return this.state.formContext;
     
     if (parent.formContext) {
@@ -178,12 +149,12 @@ EEDCompleteRequest.getFormContext = function() {
 // Utility Functions
 // ============================================================================
 
-EEDCompleteRequest.cleanGuid = function(guid) {
+CompleteRequest_HD.cleanGuid = function(guid) {
     if (!guid) return "";
     return guid.replace(/[{}]/g, "").toLowerCase();
 };
 
-EEDCompleteRequest.getCurrentUserId = function() {
+CompleteRequest_HD.getCurrentUserId = function() {
     if (this.state.currentUserId) return this.state.currentUserId;
     this.state.currentUserId = this.cleanGuid(
         this.getXrm().Utility.getGlobalContext().userSettings.userId
@@ -191,7 +162,7 @@ EEDCompleteRequest.getCurrentUserId = function() {
     return this.state.currentUserId;
 };
 
-EEDCompleteRequest.getLookupValue = function(attributeName) {
+CompleteRequest_HD.getLookupValue = function(attributeName) {
     const formContext = this.getFormContext();
     const attribute = formContext.getAttribute(attributeName);
     if (!attribute) return null;
@@ -200,7 +171,7 @@ EEDCompleteRequest.getLookupValue = function(attributeName) {
     return value[0];
 };
 
-EEDCompleteRequest.getAttributeValue = function(attributeName) {
+CompleteRequest_HD.getAttributeValue = function(attributeName) {
     const formContext = this.getFormContext();
     const attribute = formContext.getAttribute(attributeName);
     return attribute ? attribute.getValue() : null;
@@ -210,7 +181,7 @@ EEDCompleteRequest.getAttributeValue = function(attributeName) {
 // Data Loading
 // ============================================================================
 
-EEDCompleteRequest.loadFormData = function() {
+CompleteRequest_HD.loadFormData = function() {
     const formContext = this.getFormContext();
     const state = this.state;
     
@@ -218,91 +189,15 @@ EEDCompleteRequest.loadFormData = function() {
     state.request.veteran = this.getLookupValue("customerid");
     state.request.type = this.getLookupValue("vhacrm_typeintersectionid");
     state.request.area = this.getLookupValue("vhacrm_areaintersectionid");
-    state.request.facility = this.getLookupValue("vhacrm_facilityid");
     state.request.resolution = this.getLookupValue("vhacrm_resolutionintersectionid");
-    state.request.verificationMethod = this.getLookupValue("vhacrm_verificationmethodid");
     state.request.caseNoteMemo = this.getAttributeValue("vhacrm_casenotes_memo");
     state.request.caseNoteTemplate = this.getLookupValue("vhacrm_casenotetemplateid");
     state.request.lob = this.getLookupValue("vhacrm_lobid");
     state.request.subArea = this.getLookupValue("vhacrm_subareaintersectionid");
-    state.request.radDate = this.getAttributeValue("vhacrm_raddate_date");
-    state.request.reevaluateDate = this.getAttributeValue("vhacrm_reevaluatedate_date");
-    state.request.noContactRequired = this.getAttributeValue("vhacrm_nocontactrequired_bool");
-    state.request.hecAlert = this.getLookupValue("vhacrm_hecalertid");
-    
-    // Set placeholder veteran flag
-    if (state.request.veteran) {
-        state.isPlaceholderVeteran = this.cleanGuid(state.request.veteran.id) === this.config.placeholderVeteranId;
-    }
+    state.request.daysAtAssignment = this.getAttributeValue("vhacrm_daysatassignment_number");
 };
 
-EEDCompleteRequest.loadResolutionName = async function() {
-    const resolution = this.state.request.resolution;
-    if (!resolution) return;
-    
-    try {
-        const result = await this.getXrm().WebApi.retrieveRecord(
-            "vhacrm_resolutionintersection",
-            this.cleanGuid(resolution.id),
-            "?$select=vhacrm_name"
-        );
-        
-        this.state.request.resolutionName = result.vhacrm_name;
-        
-        // Set resolution flags
-        const name = result.vhacrm_name;
-        this.state.isCreatedInError = name === this.config.resolutions.createdInError;
-        this.state.isPendingFutureRAD = name === this.config.resolutions.pendingFutureRAD;
-        
-    } catch (error) {
-        console.error("Error loading resolution name:", error);
-    }
-};
-
-EEDCompleteRequest.loadActivityCounts = async function() {
-    const requestId = this.state.request.id;
-    
-    try {
-        const correspondenceResult = await this.getRelatedEntityCount("vhacrm_correspondence", requestId);
-        
-        const phoneCallResult = await this.getPhoneCallCount(requestId);
-        
-        this.state.counts.correspondence = correspondenceResult;
-        this.state.counts.phoneCalls = phoneCallResult;
-    } catch (error) {
-        console.error("Error loading activity counts:", error);
-        this.state.counts.correspondence = 0;
-        this.state.counts.phoneCalls = 0;
-    }
-};
-
-EEDCompleteRequest.getRelatedEntityCount = async function(entityName, requestId) {
-    try {
-        const result = await this.getXrm().WebApi.retrieveMultipleRecords(
-            entityName,
-            `?$filter=_vhacrm_requestid_value eq '${requestId}'&$select=${entityName}id`
-        );
-        return result.entities.length;
-    } catch (error) {
-        console.error(`Error getting ${entityName} count: `, error);
-        return 0;
-    }
-};
-
-EEDCompleteRequest.getPhoneCallCount = async function(requestId) {
-    try {
-        const result = await this.getXrm().WebApi.retrieveMultipleRecords(
-            "phonecall",
-            `?$filter=_vhacrm_requestid_value eq '${requestId}'&$select=activityid`
-        );
-        return result.entities.length;
-    } catch (error) {
-        console.error("Error getting phone call count:", error);
-        return 0;
-    }
-};
-
-EEDCompleteRequest.checkCaseNoteExistsToday = async function() {
+CompleteRequest_HD.checkCaseNoteExistsToday = async function() {
     const requestId = this.state.request.id;
     const ownerId = this.getCurrentUserId();
     
@@ -327,56 +222,19 @@ EEDCompleteRequest.checkCaseNoteExistsToday = async function() {
 // Validation
 // ============================================================================
 
-EEDCompleteRequest.isCurrentUserOwner = function() {
+CompleteRequest_HD.isCurrentUserOwner = function() {
     const owner = this.getLookupValue("ownerid");
     if (!owner) return false;
     return this.cleanGuid(owner.id) === this.getCurrentUserId();
 };
 
-EEDCompleteRequest.runValidations = function() {
+CompleteRequest_HD.runValidations = function() {
     const errors = [];
     const state = this.state;
     
-    // Skip most validations for Created in Error resolution
-    if (state.isCreatedInError) {
-        return errors;
-    }
-    
-    // Veteran is required unless customer is the placeholder veteran
-    if (!state.isPlaceholderVeteran && !state.request.veteran) {
-        errors.push("Veteran is required to complete the request.");
-    }
-    
-    // Verification Method is required unless customer is placeholder veteran
-    if (!state.isPlaceholderVeteran) {
-        if (!state.request.verificationMethod) {
-            errors.push("Verification Method is required to complete the request.");
-        }
-    }
-    
-    // Contact Method is required unless:
-    // - No Contact Required flag is set
-    // - Customer is placeholder veteran
-    if (!state.isPlaceholderVeteran) {
-        const hasContact = state.counts.correspondence > 0 || state.counts.phoneCalls > 0;
-        if (!hasContact && !state.request.noContactRequired) {
-            errors.push("Veteran Contact Method is Required");
-        }
-    }
-    
-    // Pending Future RAD validations
-    if (state.isPendingFutureRAD) {
-        if (!state.request.radDate) {
-            errors.push("RAD Date is required to complete the request.");
-        }
-        if (!state.request.reevaluateDate) {
-            errors.push("Reevaluate Date is required to complete the request.");
-        }
-    }
-    
     // Case Note is required (memo OR existing today)
     if (!state.request.caseNoteMemo && !state.caseNoteExistsToday) {
-        errors.push("A completed Case Note is required to complete the request.");
+        errors.push("A completed case note is required to complete the request.");
     }
     
     return errors;
@@ -386,7 +244,7 @@ EEDCompleteRequest.runValidations = function() {
 // Business Logic
 // ============================================================================
 
-EEDCompleteRequest.buildCaseNoteName = function() {
+CompleteRequest_HD.buildCaseNoteName = function() {
     const state = this.state;
     let name = "";
     
@@ -409,9 +267,8 @@ EEDCompleteRequest.buildCaseNoteName = function() {
     return name;
 };
 
-EEDCompleteRequest.createCaseNote = async function() {
+CompleteRequest_HD.createCaseNote = async function() {
     if (!this.state.request.caseNoteMemo) return;
-    if (!this.state.request.resolution) return;
     
     const caseNote = {
         vhacrm_name: this.buildCaseNoteName(),
@@ -423,11 +280,6 @@ EEDCompleteRequest.createCaseNote = async function() {
     // Add veteran if present
     if (this.state.request.veteran) {
         caseNote["vhacrm_veteranid@odata.bind"] = `/contacts(${this.cleanGuid(this.state.request.veteran.id)})`;
-    }
-    
-    // Add HEC Alert if present
-    if (this.state.request.hecAlert) {
-        caseNote["vhacrm_hecalertid@odata.bind"] = `/vhacrm_hecalerts(${this.cleanGuid(this.state.request.hecAlert.id)})`;
     }
     
     // Add template if present
@@ -445,64 +297,7 @@ EEDCompleteRequest.createCaseNote = async function() {
     }
 };
 
-EEDCompleteRequest.updateIncidentCaseNoteFields = async function() {
-    // Copy case note memo to hidden field and clear template
-    try {
-        await this.getXrm().WebApi.updateRecord("incident", this.state.request.id, {
-            vhacrm_casenotehidden: this.state.request.caseNoteMemo,
-            "vhacrm_casenotetemplateid@odata.bind": null
-        });
-        console.log("Incident case note fields updated");
-    } catch (error) {
-        console.error("Error updating incident case note fields:", error);
-    }
-};
-
-EEDCompleteRequest.updateIncidentRecordUrl = async function() {
-    try {
-        // Get base URL from key value pair
-        const kvpResult = await this.getXrm().WebApi.retrieveMultipleRecords(
-            "bah_keyvaluepair",
-            "?$select=bah_stringvalue_text&$filter=bah_name_text eq 'base_url'&$top=1"
-        );
-        
-        if (kvpResult.entities.length === 0) {
-            console.warn("Base URL not found in key value pairs");
-            return;
-        }
-        
-        const baseUrl = kvpResult.entities[0].bah_stringvalue_text;
-        const recordUrl = `${baseUrl}/main.aspx?etn=incident&id=${this.state.request.id}&pagetype=entityrecord`;
-        
-        await this.getXrm().WebApi.updateRecord("incident", this.state.request.id, {
-            vhacrm_recordurl_memo: recordUrl
-        });
-        
-        console.log("Record URL updated");
-    } catch (error) {
-        console.error("Error updating record URL:", error);
-    }
-};
-
-EEDCompleteRequest.updateHecAlert = async function() {
-    if (!this.state.request.hecAlert) return;
-    
-    try {
-        await this.getXrm().WebApi.updateRecord(
-            "vhacrm_hecalert",
-            this.cleanGuid(this.state.request.hecAlert.id),
-            {
-                statecode: 1,
-                statuscode: this.config.hecAlertCompletedStatusCode
-            }
-        );
-        console.log("HEC Alert updated");
-    } catch (error) {
-        console.error("Error updating HEC Alert:", error);
-    }
-};
-
-EEDCompleteRequest.executeWorkflow = async function(workflowId, targetId) {
+CompleteRequest_HD.executeWorkflow = async function(workflowId, targetId) {
     const request = {
         entity: {
             entityType: "workflow",
@@ -532,7 +327,7 @@ EEDCompleteRequest.executeWorkflow = async function(workflowId, targetId) {
     console.log(`Workflow executed successfully: ${workflowId}`);
 };
 
-EEDCompleteRequest.saveAndClose = async function() {
+CompleteRequest_HD.saveAndClose = async function() {
     try {
         await this.getFormContext().data.save();
         this.closeForm();
@@ -542,7 +337,7 @@ EEDCompleteRequest.saveAndClose = async function() {
     }
 };
 
-EEDCompleteRequest.closeForm = function() {
+CompleteRequest_HD.closeForm = function() {
     const xrm = this.getXrm();
     if (xrm.Navigation?.navigateBack) {
         xrm.Navigation.navigateBack();
@@ -555,7 +350,7 @@ EEDCompleteRequest.closeForm = function() {
 // Main Execution Flow
 // ============================================================================
 
-EEDCompleteRequest.execute = async function() {
+CompleteRequest_HD.execute = async function() {
     this.clearError();
     
     // Pre-validation: Resolution required
@@ -573,26 +368,8 @@ EEDCompleteRequest.execute = async function() {
     // Load form data
     this.loadFormData();
     
-    // Load resolution name to determine special handling
-    await this.loadResolutionName();
-    
-    // Handle "Created in Error" - just deactivate and close
-    if (this.state.isCreatedInError) {
-        try {
-            await this.executeWorkflow(this.config.deactivateWorkflowId, this.state.request.id);
-            await this.saveAndClose();
-        } catch (error) {
-            console.error("Error handling Created in Error:", error);
-            this.showError("An error occurred while processing the request.");
-        }
-        return;
-    }
-    
     // Load additional data for validation
-    await Promise.all([
-        this.loadActivityCounts(),
-        this.checkCaseNoteExistsToday()
-    ]);
+    await this.checkCaseNoteExistsToday();
     
     // Run validations
     const validationErrors = this.runValidations();
@@ -607,20 +384,16 @@ EEDCompleteRequest.execute = async function() {
         // Create case note if memo is populated
         await this.createCaseNote();
         
-        // Update incident case note fields
-        await this.updateIncidentCaseNoteFields();
-        
-        // Update incident with record URL
-        await this.updateIncidentRecordUrl();
-        
-        // Update HEC Alert if linked
-        await this.updateHecAlert();
-        
         // Save form so workflow can read latest values
         await this.getFormContext().data.save();
         
-        // Execute complete workflow
-        await this.executeWorkflow(this.config.completeWorkflowId, this.state.request.id);
+        // Execute complete workflow (only for HD LOB)
+        if (this.state.request.lob) {
+            const lobId = this.cleanGuid(this.state.request.lob.id);
+            if (lobId === this.config.hdLobId) {
+                await this.executeWorkflow(this.config.completeWorkflowId, this.state.request.id);
+            }
+        }
         
         // Close form
         this.closeForm();
@@ -636,5 +409,5 @@ EEDCompleteRequest.execute = async function() {
 // ============================================================================
 
 document.addEventListener("DOMContentLoaded", function() {
-    EEDCompleteRequest.initialize();
+    CompleteRequest_HD.initialize();
 });

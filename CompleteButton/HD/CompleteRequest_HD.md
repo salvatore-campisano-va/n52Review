@@ -170,7 +170,7 @@ The button is rendered as an iframe-embedded HTML page with:
 |----------|----------|
 | `bootstrap.min.css` | Button and spinner styling |
 | `ClientGlobalContext.js.aspx` | Dynamics CRM context |
-| `vhacrm_HDCompleteRequest.js` | Button logic |
+| `vhacrm_CompleteRequest_HD.js` | Button logic |
 
 ---
 
