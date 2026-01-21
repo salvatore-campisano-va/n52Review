@@ -17,7 +17,8 @@ CompleteRequestButton.lobHandlers = {};
 CompleteRequestButton.lobScriptMap = {
     "ivd": "CompleteRequestButton_IVD.js",
     "ncchv": "CompleteRequestButton_NCCHV.js",
-    "eed": "CompleteRequestButton_EED.js"
+    "eed": "CompleteRequestButton_EED.js",
+    "hd": "CompleteRequestButton_HD.js"
 };
 
 CompleteRequestButton.registerLOB = function(lobName, handler) {
