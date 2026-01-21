@@ -202,3 +202,20 @@ Updates the current incident with:
 | `vhacrm_hecalert` | Updated | HEC Alert resolution |
 | `vhacrm_resolutionintersection` | Queried | Resolution name lookup |
 | `bah_keyvaluepair` | Queried | Configuration values |
+
+---
+
+## HTML Web Resource
+
+The button is rendered as an iframe-embedded HTML page with:
+- Bootstrap 4 CSS for styling
+- Bootstrap 4 spinner component for loading state
+- No custom CSS (uses Bootstrap utility classes)
+
+### Dependencies
+
+| Resource | Purpose |
+|----------|----------|
+| `bootstrap.min.css` | Button and spinner styling |
+| `ClientGlobalContext.js.aspx` | Dynamics CRM context |
+| `vhacrm_IVDCompleteRequest.js` | Button logic |

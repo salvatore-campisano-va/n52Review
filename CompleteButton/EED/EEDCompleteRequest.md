@@ -247,15 +247,14 @@ Only non-empty values are included, separated by `/`.
 
 The button is rendered as an iframe-embedded HTML page with:
 - Bootstrap 4 CSS for styling
-- Vanilla JavaScript (no jQuery dependency)
-- Custom spinner animation during loading
-- Green success button styling (`#107c10`)
+- Bootstrap 4 spinner component for loading state
+- No custom CSS (uses Bootstrap utility classes)
 
 ### Dependencies
 
 | Resource | Purpose |
 |----------|----------|
-| `bootstrap.min.css` | Button styling |
+| `bootstrap.min.css` | Button and spinner styling |
 | `ClientGlobalContext.js.aspx` | Dynamics CRM context |
 | `vhacrm_EEDCompleteRequest.js` | Button logic |
 

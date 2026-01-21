@@ -209,7 +209,8 @@ The button does **not** directly modify any fields on the Incident record. The w
 
 ### Loading State
 - Button text changes to "Processing..." during execution
-- Button is disabled (via CSS class `btn-loading`) to prevent double-clicks
+- Button is disabled (via `disabled` attribute) to prevent double-clicks
+- Bootstrap 4 spinner component shown during loading
 - Button is re-enabled in `finally` block even if errors occur
 
 ### Console Logging
@@ -247,3 +248,20 @@ The "today" check uses UTC dates to match Dataverse storage. Calculates the star
 
 ### Async/Await Pattern
 All WebApi calls use async/await with try/catch blocks for error handling. Errors are logged to console and re-thrown with user-friendly messages.
+
+---
+
+## HTML Web Resource
+
+The button is rendered as an iframe-embedded HTML page with:
+- Bootstrap 4 CSS for styling
+- Bootstrap 4 spinner component for loading state
+- No custom CSS (uses Bootstrap utility classes)
+
+### Dependencies
+
+| Resource | Purpose |
+|----------|----------|
+| `bootstrap.min.css` | Button and spinner styling |
+| `ClientGlobalContext.js.aspx` | Dynamics CRM context |
+| `vhacrm_NCCHVCompleteRequest.js` | Button logic |
