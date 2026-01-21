@@ -92,7 +92,7 @@ CompleteRequestButton.initialize = function() {
     }
     
     this.state.$button.addEventListener("click", async function() {
-        if (self.state.$button.classList.contains("btn-loading")) return;
+        if (self.state.$button.disabled) return;
         
         try {
             ButtonBase.setButtonLoading(self.state.$button, true, "Processing...", "Complete Request");

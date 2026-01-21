@@ -128,15 +128,16 @@ ButtonBase.setButtonLoading = function($button, isLoading, loadingText = "Proces
     if (!$button) return;
     
     const buttonTextEl = $button.querySelector(".button-text");
+    const spinnerEl = $button.querySelector(".spinner-border");
     
     if (isLoading) {
-        $button.classList.add("btn-loading");
         $button.disabled = true;
         if (buttonTextEl) buttonTextEl.textContent = loadingText;
+        if (spinnerEl) spinnerEl.classList.remove("d-none");
     } else {
-        $button.classList.remove("btn-loading");
         $button.disabled = false;
         if (buttonTextEl) buttonTextEl.textContent = normalText;
+        if (spinnerEl) spinnerEl.classList.add("d-none");
     }
 };
 
