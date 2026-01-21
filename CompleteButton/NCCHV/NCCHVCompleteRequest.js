@@ -60,7 +60,7 @@ NCCHVCompleteRequest.initialize = function() {
     }
     
     this.$button.addEventListener("click", async function() {
-        if (self.$button.classList.contains("btn-loading")) return;
+        if (self.$button.disabled) return;
         
         try {
             self.setButtonLoading(true);
@@ -83,12 +83,16 @@ NCCHVCompleteRequest.initialize = function() {
 NCCHVCompleteRequest.setButtonLoading = function(isLoading) {
     if (!this.$button) return;
     
+    const spinner = this.$button.querySelector(".spinner-border");
+    
     if (isLoading) {
-        this.$button.classList.add("btn-loading");
+        this.$button.disabled = true;
         this.$button.querySelector(".button-text").textContent = "Processing...";
+        if (spinner) spinner.classList.remove("d-none");
     } else {
-        this.$button.classList.remove("btn-loading");
+        this.$button.disabled = false;
         this.$button.querySelector(".button-text").textContent = "Complete Request";
+        if (spinner) spinner.classList.add("d-none");
     }
 };
 
