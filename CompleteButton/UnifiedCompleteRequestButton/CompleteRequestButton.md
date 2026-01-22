@@ -122,6 +122,82 @@ CompleteRequestButton.lobScriptMap = {
 | `updateHecAlert()` | Update linked HEC Alert to completed status |
 | `execute()` | Main execution entry point |
 
+### Shared LOB Utilities
+
+The base module provides shared utilities that LOB handlers can use to reduce code duplication:
+
+| Function | Description |
+|----------|-------------|
+| `loadCommonFormFields()` | Returns object with type, area, subArea, caseNoteMemo, caseNoteTemplate |
+| `checkCaseNoteExistsToday(requestId)` | Returns boolean if case note exists today by current user |
+| `buildCaseNoteName(lob, type, area, subArea)` | Returns formatted "LOB/Type/Area/SubArea" string |
+| `createCaseNote(options)` | Creates case note record with provided options |
+| `updateIncidentCaseNoteFields(requestId, memo)` | Updates hidden field and clears template |
+| `setRecordUrl(requestId)` | Sets vhacrm_recordurl_memo on incident |
+| `validateCaseNoteRequired(memo, existsToday)` | Returns error message or null |
+
+#### createCaseNote Options
+
+```javascript
+await CompleteRequestButton.createCaseNote({
+    requestId: base.state.request.id,           // Required
+    caseNoteName: "LOB/Type/Area/SubArea",      // Required
+    caseNoteMemo: "Case note content",           // Required
+    caseNoteTypeCode: 168790000,                 // Required
+    veteran: { id: "...", name: "..." },         // Optional
+    hecAlert: { id: "...", name: "..." },        // Optional
+    caseNoteTemplate: { id: "...", name: "..." } // Optional
+});
+```
+
+#### Example Usage in LOB Handler
+
+```javascript
+loadFormData: function(base) {
+    // Use shared utility instead of manual field loading
+    const commonFields = CompleteRequestButton.loadCommonFormFields();
+    this.state.type = commonFields.type;
+    this.state.area = commonFields.area;
+    this.state.subArea = commonFields.subArea;
+    this.state.caseNoteMemo = commonFields.caseNoteMemo;
+    this.state.caseNoteTemplate = commonFields.caseNoteTemplate;
+},
+
+checkCaseNoteExistsToday: async function(base) {
+    this.state.caseNoteExistsToday = await CompleteRequestButton.checkCaseNoteExistsToday(base.state.request.id);
+},
+
+runValidations: function(base) {
+    const errors = [];
+    
+    // Use shared validation
+    const caseNoteError = CompleteRequestButton.validateCaseNoteRequired(
+        this.state.caseNoteMemo,
+        this.state.caseNoteExistsToday
+    );
+    if (caseNoteError) errors.push(caseNoteError);
+    
+    return errors;
+},
+
+createCaseNote: async function(base) {
+    await CompleteRequestButton.createCaseNote({
+        requestId: base.state.request.id,
+        caseNoteName: CompleteRequestButton.buildCaseNoteName(
+            base.state.request.lob,
+            this.state.type,
+            this.state.area,
+            this.state.subArea
+        ),
+        caseNoteMemo: this.state.caseNoteMemo,
+        caseNoteTypeCode: this.config.caseNoteTypeCode,
+        veteran: base.state.request.veteran,
+        hecAlert: base.state.request.hecAlert,
+        caseNoteTemplate: this.state.caseNoteTemplate
+    });
+}
+```
+
 ## LOB Handler Pattern
 
 Each LOB handler follows the IIFE (Immediately Invoked Function Expression) pattern with self-registration:
@@ -279,33 +355,62 @@ config: {
 
 ### IVD Handler
 
-**Purpose:** Complete IVD requests
-
-**Validations:**
-- (Inherits base validations)
-- Case Note required
-
-**Execution:**
-- Similar to EED with IVD-specific fields
-
-### NCCHV Handler
-
-**Purpose:** Complete NCCHV requests
+**Purpose:** Complete IVD (Income Verification Division) requests
 
 **Configuration:**
 ```javascript
 config: {
-    workflows: {
-        deactivateNCCHV: "27C9DD00-A7FF-EE11-8179-00155D011E3E"
-    }
+    // Uses base workflows (completeRequest)
+}
+```
+
+**State:**
+- verificationMethod, icn, radDate, reevaluateDate, enrollmentStatus
+
+**Validations:**
+- Veteran required (inherits from base)
+- Verification Method required
+- RAD Date required (if Pending Future RAD)
+- Reevaluate Date required (if Pending Future RAD)
+
+**Execution:**
+1. Load IVD-specific form data (radDate, reevaluateDate, icn)
+2. Load Verification Method via API
+3. Run validations
+4. Call Enrollment Status API (using ICN)
+5. Update request record (recordUrl, enrollmentStatus)
+6. Update HEC Alert
+7. Execute complete workflow
+8. Save and close form
+
+**Note:** IVD does NOT create case notes.
+
+### NCCHV Handler
+
+**Purpose:** Complete NCCHV (National Call Center for Homeless Veterans) requests
+
+**Configuration:**
+```javascript
+config: {
+    completeWorkflowId: "381d264d-ac3d-43b0-ba95-2ba2cb2a5506",
+    caseNoteTypeCode: 168790000
 }
 ```
 
 **Validations:**
-- (NCCHV-specific validations)
+- Veteran required (inherits from base)
+- Case Note required (memo OR existing today)
 
 **Execution:**
-- Uses NCCHV-specific deactivate workflow
+1. Load form data (type, area, subArea, memo, template)
+2. Check if case note exists today
+3. Run validations
+4. Create case note (includes HEC Alert reference)
+5. Update incident case note fields
+6. Update HEC Alert
+7. Save form
+8. Execute NCCHV complete workflow
+9. Close form
 
 ## Adding a New LOB
 
