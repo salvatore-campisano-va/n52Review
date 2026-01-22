@@ -40,12 +40,16 @@
          * Load EED-specific form data
          */
         loadFormData: function(base) {
-            this.state.type = ButtonBase.getLookupValue("vhacrm_typeintersectionid");
-            this.state.area = ButtonBase.getLookupValue("vhacrm_areaintersectionid");
-            this.state.subArea = ButtonBase.getLookupValue("vhacrm_subareaintersectionid");
+            // Use shared utility for common form fields
+            const commonFields = CompleteRequestButton.loadCommonFormFields();
+            this.state.type = commonFields.type;
+            this.state.area = commonFields.area;
+            this.state.subArea = commonFields.subArea;
+            this.state.caseNoteMemo = commonFields.caseNoteMemo;
+            this.state.caseNoteTemplate = commonFields.caseNoteTemplate;
+            
+            // EED-specific fields
             this.state.verificationMethod = ButtonBase.getLookupValue("vhacrm_verificationmethodid");
-            this.state.caseNoteMemo = ButtonBase.getAttributeValue("vhacrm_casenotes_memo");
-            this.state.caseNoteTemplate = ButtonBase.getLookupValue("vhacrm_casenotetemplateid");
             this.state.radDate = ButtonBase.getAttributeValue("vhacrm_raddate_date");
             this.state.reevaluateDate = ButtonBase.getAttributeValue("vhacrm_reevaluatedate_date");
             this.state.noContactRequired = ButtonBase.getAttributeValue("vhacrm_nocontactrequired_bool");
@@ -108,21 +112,7 @@
          * Check if case note exists today by current user
          */
         checkCaseNoteExistsToday: async function(base) {
-            const requestId = base.state.request.id;
-            const ownerId = ButtonBase.getCurrentUserId();
-            
-            const todayRange = ButtonBase.getTodayRange();
-            
-            try {
-                const result = await ButtonBase.retrieveMultipleRecords(
-                    "vhacrm_casenote",
-                    `?$select=vhacrm_casenoteid&$top=1&$filter=_vhacrm_requestid_value eq '${requestId}' and _createdby_value eq '${ownerId}' and createdon ge ${todayRange.start.toISOString()} and createdon le ${todayRange.end.toISOString()}`
-                );
-                this.state.caseNoteExistsToday = result.entities.length > 0;
-            } catch (error) {
-                console.error("Error checking case note existence:", error);
-                this.state.caseNoteExistsToday = false;
-            }
+            this.state.caseNoteExistsToday = await CompleteRequestButton.checkCaseNoteExistsToday(base.state.request.id);
         },
         
         /**
@@ -167,36 +157,15 @@
             }
             
             // Case Note is required (memo OR existing today)
-            if (!this.state.caseNoteMemo && !this.state.caseNoteExistsToday) {
-                errors.push("A completed Case Note is required to complete the request.");
+            const caseNoteError = CompleteRequestButton.validateCaseNoteRequired(
+                this.state.caseNoteMemo,
+                this.state.caseNoteExistsToday
+            );
+            if (caseNoteError) {
+                errors.push(caseNoteError);
             }
             
             return errors;
-        },
-        
-        /**
-         * Build case note name from LOB/Type/Area/SubArea
-         */
-        buildCaseNoteName: function(base) {
-            let name = "";
-            
-            if (base.state.request.lob) {
-                name = base.state.request.lob.name;
-            }
-            
-            if (this.state.type) {
-                name += (name ? "/" : "") + this.state.type.name;
-            }
-            
-            if (this.state.area) {
-                name += (name ? "/" : "") + this.state.area.name;
-            }
-            
-            if (this.state.subArea) {
-                name += (name ? "/" : "") + this.state.subArea.name;
-            }
-            
-            return name;
         },
         
         /**
@@ -206,75 +175,37 @@
             if (!this.state.caseNoteMemo) return;
             if (!base.state.request.resolution) return;
             
-            const caseNote = {
-                vhacrm_name: this.buildCaseNoteName(base),
-                vhacrm_casenotes_memo: this.state.caseNoteMemo,
-                "vhacrm_requestid@odata.bind": `/incidents(${base.state.request.id})`,
-                vhacrm_casenotetype_code: this.config.caseNoteTypeCode
-            };
-            
-            // Add veteran if present
-            if (base.state.request.veteran) {
-                caseNote["vhacrm_veteranid@odata.bind"] = `/contacts(${ButtonBase.cleanGuid(base.state.request.veteran.id)})`;
-            }
-            
-            // Add HEC Alert if present
-            if (base.state.request.hecAlert) {
-                caseNote["vhacrm_hecalertid@odata.bind"] = `/vhacrm_hecalerts(${ButtonBase.cleanGuid(base.state.request.hecAlert.id)})`;
-            }
-            
-            // Add template if present
-            if (this.state.caseNoteTemplate) {
-                caseNote["vhacrm_casenotetemplateid@odata.bind"] = 
-                    `/vhacrm_casenotetemplates(${ButtonBase.cleanGuid(this.state.caseNoteTemplate.id)})`;
-            }
-            
-            try {
-                await ButtonBase.createRecord("vhacrm_casenote", caseNote);
-                console.log("Case note created successfully");
-            } catch (error) {
-                console.error("Error creating case note:", error);
-                throw new Error("Failed to create case note.");
-            }
+            await CompleteRequestButton.createCaseNote({
+                requestId: base.state.request.id,
+                caseNoteName: CompleteRequestButton.buildCaseNoteName(
+                    base.state.request.lob,
+                    this.state.type,
+                    this.state.area,
+                    this.state.subArea
+                ),
+                caseNoteMemo: this.state.caseNoteMemo,
+                caseNoteTypeCode: this.config.caseNoteTypeCode,
+                veteran: base.state.request.veteran,
+                hecAlert: base.state.request.hecAlert,
+                caseNoteTemplate: this.state.caseNoteTemplate
+            });
         },
         
         /**
          * Update incident case note fields
          */
         updateIncidentCaseNoteFields: async function(base) {
-            try {
-                await ButtonBase.updateRecord("incident", base.state.request.id, {
-                    vhacrm_casenotehidden: this.state.caseNoteMemo,
-                    "vhacrm_casenotetemplateid@odata.bind": null
-                });
-                console.log("Incident case note fields updated");
-            } catch (error) {
-                console.error("Error updating incident case note fields:", error);
-            }
+            await CompleteRequestButton.updateIncidentCaseNoteFields(
+                base.state.request.id,
+                this.state.caseNoteMemo
+            );
         },
         
         /**
          * Update incident with record URL
          */
         updateIncidentRecordUrl: async function(base) {
-            try {
-                const baseUrl = await ButtonBase.getKeyValuePair("base_url");
-                
-                if (!baseUrl) {
-                    console.warn("Base URL not found in key value pairs");
-                    return;
-                }
-                
-                const recordUrl = `${baseUrl}/main.aspx?etn=incident&id=${base.state.request.id}&pagetype=entityrecord`;
-                
-                await ButtonBase.updateRecord("incident", base.state.request.id, {
-                    vhacrm_recordurl_memo: recordUrl
-                });
-                
-                console.log("Record URL updated");
-            } catch (error) {
-                console.error("Error updating record URL:", error);
-            }
+            await CompleteRequestButton.setRecordUrl(base.state.request.id);
         },
         
         /**

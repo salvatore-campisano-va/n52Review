@@ -119,7 +119,7 @@
             try {
                 const baseUrl = await ButtonBase.getKeyValuePair("base_url");
                 const recordUrl = baseUrl 
-                    ? `${baseUrl}main.aspx?etn=incident&id=${base.state.request.id}&pagetype=entityrecord`
+                    ? `${baseUrl}/main.aspx?etn=incident&id=${base.state.request.id}&pagetype=entityrecord`
                     : "";
                 
                 await ButtonBase.updateRecord("incident", base.state.request.id, {

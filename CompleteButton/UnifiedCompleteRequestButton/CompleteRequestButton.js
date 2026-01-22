@@ -225,6 +225,179 @@ CompleteRequestButton.updateHecAlert = async function() {
 };
 
 // ============================================================================
+// Shared LOB Utilities
+// ============================================================================
+
+/**
+ * Load common form fields used by multiple LOBs
+ * @returns {Object} Object containing type, area, subArea, caseNoteMemo, caseNoteTemplate
+ */
+CompleteRequestButton.loadCommonFormFields = function() {
+    return {
+        type: ButtonBase.getLookupValue("vhacrm_typeintersectionid"),
+        area: ButtonBase.getLookupValue("vhacrm_areaintersectionid"),
+        subArea: ButtonBase.getLookupValue("vhacrm_subareaintersectionid"),
+        caseNoteMemo: ButtonBase.getAttributeValue("vhacrm_casenotes_memo"),
+        caseNoteTemplate: ButtonBase.getLookupValue("vhacrm_casenotetemplateid")
+    };
+};
+
+/**
+ * Check if a case note exists today created by the current user
+ * @param {string} requestId - The request ID
+ * @returns {Promise<boolean>} True if case note exists today
+ */
+CompleteRequestButton.checkCaseNoteExistsToday = async function(requestId) {
+    const ownerId = ButtonBase.getCurrentUserId();
+    const todayRange = ButtonBase.getTodayRange();
+    
+    try {
+        const result = await ButtonBase.retrieveMultipleRecords(
+            "vhacrm_casenote",
+            `?$select=vhacrm_casenoteid&$top=1&$filter=_vhacrm_requestid_value eq '${requestId}' and _createdby_value eq '${ownerId}' and createdon ge ${todayRange.start.toISOString()} and createdon le ${todayRange.end.toISOString()}`
+        );
+        return result.entities.length > 0;
+    } catch (error) {
+        console.error("Error checking case note existence:", error);
+        return false;
+    }
+};
+
+/**
+ * Build case note name from LOB/Type/Area/SubArea
+ * @param {Object} lob - LOB lookup value
+ * @param {Object} type - Type lookup value
+ * @param {Object} area - Area lookup value
+ * @param {Object} subArea - SubArea lookup value
+ * @returns {string} Formatted case note name
+ */
+CompleteRequestButton.buildCaseNoteName = function(lob, type, area, subArea) {
+    let name = "";
+    
+    if (lob) {
+        name = lob.name;
+    }
+    
+    if (type) {
+        name += (name ? "/" : "") + type.name;
+    }
+    
+    if (area) {
+        name += (name ? "/" : "") + area.name;
+    }
+    
+    if (subArea) {
+        name += (name ? "/" : "") + subArea.name;
+    }
+    
+    return name;
+};
+
+/**
+ * Create a case note record
+ * @param {Object} options - Case note options
+ * @param {string} options.requestId - Request ID
+ * @param {string} options.caseNoteName - Case note name
+ * @param {string} options.caseNoteMemo - Case note memo content
+ * @param {number} options.caseNoteTypeCode - Case note type code
+ * @param {Object} [options.veteran] - Veteran lookup value
+ * @param {Object} [options.hecAlert] - HEC Alert lookup value
+ * @param {Object} [options.caseNoteTemplate] - Case note template lookup value
+ * @returns {Promise<void>}
+ */
+CompleteRequestButton.createCaseNote = async function(options) {
+    if (!options.caseNoteMemo) return;
+    
+    const caseNote = {
+        vhacrm_name: options.caseNoteName,
+        vhacrm_casenotes_memo: options.caseNoteMemo,
+        "vhacrm_requestid@odata.bind": `/incidents(${options.requestId})`,
+        vhacrm_casenotetype_code: options.caseNoteTypeCode
+    };
+    
+    // Add veteran if present
+    if (options.veteran) {
+        caseNote["vhacrm_veteranid@odata.bind"] = `/contacts(${ButtonBase.cleanGuid(options.veteran.id)})`;
+    }
+    
+    // Add HEC Alert if present
+    if (options.hecAlert) {
+        caseNote["vhacrm_hecalertid@odata.bind"] = `/vhacrm_hecalerts(${ButtonBase.cleanGuid(options.hecAlert.id)})`;
+    }
+    
+    // Add template if present
+    if (options.caseNoteTemplate) {
+        caseNote["vhacrm_casenotetemplateid@odata.bind"] = 
+            `/vhacrm_casenotetemplates(${ButtonBase.cleanGuid(options.caseNoteTemplate.id)})`;
+    }
+    
+    try {
+        await ButtonBase.createRecord("vhacrm_casenote", caseNote);
+        console.log("Case note created successfully");
+    } catch (error) {
+        console.error("Error creating case note:", error);
+        throw new Error("Failed to create case note.");
+    }
+};
+
+/**
+ * Update incident case note fields (clear memo and template)
+ * @param {string} requestId - Request ID
+ * @param {string} caseNoteMemo - Case note memo to store in hidden field
+ * @returns {Promise<void>}
+ */
+CompleteRequestButton.updateIncidentCaseNoteFields = async function(requestId, caseNoteMemo) {
+    try {
+        await ButtonBase.updateRecord("incident", requestId, {
+            vhacrm_casenotehidden: caseNoteMemo,
+            "vhacrm_casenotetemplateid@odata.bind": null
+        });
+        console.log("Incident case note fields updated");
+    } catch (error) {
+        console.error("Error updating incident case note fields:", error);
+    }
+};
+
+/**
+ * Update incident with record URL
+ * @param {string} requestId - Request ID
+ * @returns {Promise<void>}
+ */
+CompleteRequestButton.setRecordUrl = async function(requestId) {
+    try {
+        const baseUrl = await ButtonBase.getKeyValuePair("base_url");
+        
+        if (!baseUrl) {
+            console.warn("Base URL not found in key value pairs");
+            return;
+        }
+        
+        const recordUrl = `${baseUrl}/main.aspx?etn=incident&id=${requestId}&pagetype=entityrecord`;
+        
+        await ButtonBase.updateRecord("incident", requestId, {
+            vhacrm_recordurl_memo: recordUrl
+        });
+        
+        console.log("Record URL updated");
+    } catch (error) {
+        console.error("Error updating record URL:", error);
+    }
+};
+
+/**
+ * Validate that a case note exists (either memo or created today)
+ * @param {string} caseNoteMemo - Case note memo
+ * @param {boolean} caseNoteExistsToday - Whether case note exists today
+ * @returns {string|null} Error message or null if valid
+ */
+CompleteRequestButton.validateCaseNoteRequired = function(caseNoteMemo, caseNoteExistsToday) {
+    if (!caseNoteMemo && !caseNoteExistsToday) {
+        return "A completed Case Note is required to complete the request.";
+    }
+    return null;
+};
+
+// ============================================================================
 // LOB Handler Resolution & Dynamic Loading
 // ============================================================================
 
