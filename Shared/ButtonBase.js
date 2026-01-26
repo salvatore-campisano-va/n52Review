@@ -293,3 +293,104 @@ ButtonBase.getTodayRange = function() {
 ButtonBase.formatDateForOData = function(date) {
     return date.toISOString();
 };
+
+// ============================================================================
+// Navigation Helpers
+// ============================================================================
+
+/**
+ * Open an existing record form
+ * @param {string} entityName - Logical name of the entity
+ * @param {string} entityId - GUID of the record to open
+ * @param {Object} options - Additional options (formId, windowPosition, etc.)
+ * @returns {Promise} - Resolves when form is closed
+ */
+ButtonBase.openExistingForm = async function(entityName, entityId, options = {}) {
+    const formOptions = {
+        entityName: entityName,
+        entityId: this.cleanGuid(entityId),
+        ...options
+    };
+    
+    return await this.getXrm().Navigation.openForm(formOptions);
+};
+
+/**
+ * Open a new record form with optional pre-populated fields
+ * @param {string} entityName - Logical name of the entity
+ * @param {Object} formParameters - Fields to pre-populate on the new form
+ * @param {Object} options - Additional options (formId, useQuickCreateForm, etc.)
+ * @returns {Promise} - Resolves with savedEntityReference when form is closed
+ */
+ButtonBase.openNewForm = async function(entityName, formParameters = {}, options = {}) {
+    const formOptions = {
+        entityName: entityName,
+        useQuickCreateForm: false,
+        ...options
+    };
+    
+    if (Object.keys(formParameters).length > 0) {
+        formOptions.formParameters = formParameters;
+    }
+    
+    return await this.getXrm().Navigation.openForm(formOptions);
+};
+
+/**
+ * Open a new record form and refresh parent form after save
+ * @param {string} entityName - Logical name of the entity
+ * @param {Object} formParameters - Fields to pre-populate on the new form
+ * @param {Object} options - Additional options
+ * @returns {Promise<string|null>} - Returns the new record ID if created, null otherwise
+ */
+ButtonBase.openNewFormWithRefresh = async function(entityName, formParameters = {}, options = {}) {
+    const result = await this.openNewForm(entityName, formParameters, options);
+    
+    if (result && result.savedEntityReference && result.savedEntityReference.length > 0) {
+        const newRecordId = result.savedEntityReference[0].id;
+        console.log(`New ${entityName} created:`, newRecordId);
+        this.refreshForm();
+        return newRecordId;
+    }
+    
+    return null;
+};
+
+/**
+ * Open an existing form or create new based on whether ID exists
+ * @param {string} entityName - Logical name of the entity
+ * @param {string|null} existingId - GUID of existing record, or null to create new
+ * @param {Object} newFormParameters - Fields to pre-populate if creating new
+ * @param {boolean} refreshOnCreate - Whether to refresh parent form after creating new record
+ * @returns {Promise<string|null>} - Returns record ID if new record created
+ */
+ButtonBase.openExistingOrNewForm = async function(entityName, existingId, newFormParameters = {}, refreshOnCreate = true) {
+    if (existingId) {
+        await this.openExistingForm(entityName, existingId);
+        return null;
+    } else if (refreshOnCreate) {
+        return await this.openNewFormWithRefresh(entityName, newFormParameters);
+    } else {
+        const result = await this.openNewForm(entityName, newFormParameters);
+        if (result && result.savedEntityReference && result.savedEntityReference.length > 0) {
+            return result.savedEntityReference[0].id;
+        }
+        return null;
+    }
+};
+
+/**
+ * Build lookup form parameters for pre-populating a lookup field on a new form
+ * @param {string} fieldName - Logical name of the lookup field (without suffixes)
+ * @param {string} targetEntity - Entity type of the lookup target
+ * @param {string} id - GUID of the record to link
+ * @param {string} name - Display name for the lookup
+ * @returns {Object} - Form parameters object for the lookup
+ */
+ButtonBase.buildLookupFormParameters = function(fieldName, targetEntity, id, name) {
+    return {
+        [fieldName]: this.cleanGuid(id),
+        [fieldName + "name"]: name,
+        [fieldName + "type"]: targetEntity
+    };
+};
