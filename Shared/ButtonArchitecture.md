@@ -63,6 +63,13 @@ The foundation layer containing utilities shared across **all** button types.
 │  ├── closeForm() / refreshForm()                                 │
 │  └── isCurrentUserOwner()                                        │
 ├──────────────────────────────────────────────────────────────────┤
+│  Navigation Helpers                                               │
+│  ├── openExistingForm(entityName, entityId, options)             │
+│  ├── openNewForm(entityName, formParameters, options)            │
+│  ├── openNewFormWithRefresh(entityName, formParameters, options) │
+│  ├── openExistingOrNewForm(entityName, existingId, params, refresh)│
+│  └── buildLookupFormParameters(fieldName, entity, id, name)      │
+├──────────────────────────────────────────────────────────────────┤
 │  Date Helpers                                                     │
 │  ├── getTodayRange()                                             │
 │  └── formatDateForOData()                                        │
@@ -288,6 +295,7 @@ User Click
 
 ```
 n52 Review/
+│
 ├── Shared/
 │   ├── ButtonBase.js              ← Shared utilities (all buttons)
 │   └── ButtonArchitecture.md      ← This file
@@ -300,13 +308,39 @@ n52 Review/
 │       ├── CompleteRequestButton_NCCHV.js ← NCCHV handler
 │       └── CompleteRequestButton_EED.js   ← EED handler
 │
-└── NextStepButton/
-    └── UnifiedNextStepButton/
-        ├── NextStepButton.html            ← HTML entry point
-        ├── NextStepButton.js              ← Base module
-        ├── NextStepButton_PCC.js          ← PCC handler
-        └── NextStepButton_NCCHV.js        ← NCCHV handler
+├── NextStepButton/
+│   └── UnifiedNextStepButton/
+│       ├── NextStepButton.html            ← HTML entry point
+│       ├── NextStepButton.js              ← Base module
+│       ├── NextStepButton_PCC.js          ← PCC handler
+│       └── NextStepButton_NCCHV.js        ← NCCHV handler
+│
+├── VerificationMethodButton/              ← Standalone button (LOB agnostic)
+│   ├── SelectVerificationMethod.html      ← HTML entry point
+│   ├── SelectVerificationMethod.js        ← Button logic
+│   └── SelectVerificationMethod.md        ← Documentation
+│
+└── (other standalone buttons go here)
 ```
+
+## Button Types
+
+### LOB-Aware Buttons (with LOB Handlers)
+
+These buttons have different behavior per Line of Business:
+
+| Button | LOBs | Uses LOB Handlers |
+|--------|------|-------------------|
+| CompleteRequestButton | IVD, NCCHV, EED | ✅ Yes |
+| NextStepButton | PCC, NCCHV | ✅ Yes |
+
+### Standalone Buttons (LOB Agnostic)
+
+These buttons work the same across all LOBs:
+
+| Button | Purpose | Uses ButtonBase |
+|--------|---------|-----------------|
+| SelectVerificationMethod | Open/create verification method record | ✅ Yes |
 
 ## Script Loading Order
 
@@ -451,6 +485,99 @@ NextStepButton.lobScriptMap = {
     "ncchv": "NextStepButton_NCCHV.js",
     "newlob": "NextStepButton_NEWLOB.js"  // Add this
 };
+```
+
+## Adding a Standalone Button
+
+For buttons that work the same across all LOBs (no LOB-specific logic):
+
+1. Create HTML file with ButtonBase dependency:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>My Button</title>
+    <link href="/WebResources/vhacrm_/Common/.../bootstrap.min.css" rel="stylesheet">
+    <script src="ClientGlobalContext.js.aspx"></script>
+    <script src="/WebResources/vhacrm_ButtonBase.js"></script>
+    <script src="vhacrm_MyButton.js"></script>
+</head>
+<body class="p-2">
+    <button type="button" id="MyButton" class="btn btn-primary">
+        <span class="button-text">My Button</span>
+        <span class="spinner-border spinner-border-sm d-none ml-2"></span>
+    </button>
+</body>
+</html>
+```
+
+2. Create JS file using ButtonBase utilities:
+
+```javascript
+var MyButton = MyButton || {};
+
+MyButton.config = {
+    buttonId: "MyButton",
+    buttonText: "My Button",
+    loadingText: "Processing..."
+};
+
+MyButton.state = {
+    $button: null,
+    // Add state properties
+};
+
+MyButton.initialize = function() {
+    const self = this;
+    this.state.$button = document.getElementById(this.config.buttonId);
+    
+    this.state.$button.addEventListener("click", async function() {
+        if (self.state.$button.disabled) return;
+        try {
+            ButtonBase.setButtonLoading(self.state.$button, true, 
+                self.config.loadingText, self.config.buttonText);
+            await self.execute();
+        } catch (error) {
+            console.error("Error:", error);
+            ButtonBase.showAlert("An unexpected error occurred.");
+        } finally {
+            ButtonBase.setButtonLoading(self.state.$button, false, 
+                self.config.loadingText, self.config.buttonText);
+        }
+    });
+};
+
+MyButton.validate = function() {
+    // Use ButtonBase helpers for validation
+    if (!ButtonBase.isLookupPopulated("customerid")) {
+        return { isValid: false, message: "Veteran is required." };
+    }
+    return { isValid: true };
+};
+
+MyButton.execute = async function() {
+    ButtonBase.clearError("MY_BUTTON_ERROR");
+    
+    const validation = this.validate();
+    if (!validation.isValid) {
+        ButtonBase.showError(validation.message, "MY_BUTTON_ERROR");
+        return;
+    }
+    
+    // Use ButtonBase navigation helpers
+    await ButtonBase.openExistingOrNewForm(
+        "my_entity",
+        existingId,
+        formParameters,
+        true
+    );
+};
+
+document.addEventListener("DOMContentLoaded", function() {
+    MyButton.initialize();
+});
 ```
 
 ## Benefits
